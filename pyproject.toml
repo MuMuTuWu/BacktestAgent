@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "dotenv>=0.9.9",
     "httpx[socks]>=0.28.1",
+    "jqdatasdk>=1.9.7",
     "jupyter>=1.1.1",
     "langchain>=0.3.27",
     "langchain-openai>=0.3.33",

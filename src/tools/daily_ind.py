@@ -1,0 +1,105 @@
+# %%
+"""
+Tushare数据获取工具
+提供LangChain工具来访问Tushare的各种数据接口
+"""
+
+import os
+from typing import Optional, List, Dict, Any, Annotated
+from langchain_core.tools import tool
+import tushare as ts
+import pandas as pd
+
+from .utils import _init_tushare_api
+
+
+@tool("tushare_daily_basic")
+def tushare_daily_basic_tool(
+    ts_code: Annotated[str, "股票代码，例如：000001.SZ"] = None,
+    trade_date: Annotated[Optional[str], "交易日期，格式YYYYMMDD，例如：20240101"] = None,
+    start_date: Annotated[Optional[str], "开始日期，格式YYYYMMDD"] = None,
+    end_date: Annotated[Optional[str], "结束日期，格式YYYYMMDD"] = None,
+    fields: Annotated[Optional[str], "指定返回的字段，例如：'ts_code,trade_date,close,pe,pb'，如果为空则返回所有字段"] = None
+) -> str:
+    """获取股票每日基本面指标数据，包括市盈率、市净率、换手率等重要指标。
+    
+    输入参数：
+    - ts_code: 股票代码（可选），例如：000001.SZ
+    - trade_date: 交易日期（可选），格式YYYYMMDD，例如：20240101
+    - start_date: 开始日期（可选），格式YYYYMMDD
+    - end_date: 结束日期（可选），格式YYYYMMDD  
+    - fields: 指定返回字段（可选），例如：'ts_code,trade_date,close,pe,pb'
+    
+    输出字段包括：
+    - ts_code: TS股票代码
+    - trade_date: 交易日期
+    - close: 当日收盘价
+    - turnover_rate: 换手率（%）
+    - turnover_rate_f: 换手率（自由流通股）
+    - volume_ratio: 量比
+    - pe: 市盈率（总市值/净利润）
+    - pe_ttm: 市盈率（TTM）
+    - pb: 市净率（总市值/净资产）
+    - ps: 市销率
+    - ps_ttm: 市销率（TTM）
+    - dv_ratio: 股息率（%）
+    - dv_ttm: 股息率（TTM）（%）
+    - total_share: 总股本（万股）
+    - float_share: 流通股本（万股）
+    - free_share: 自由流通股本（万）
+    - total_mv: 总市值（万元）
+    - circ_mv: 流通市值（万元）
+    """
+    try:
+        # 确保API已初始化
+        pro = _init_tushare_api()
+        
+        # 验证参数
+        if not ts_code and not trade_date:
+            return "错误：ts_code和trade_date必须至少提供一个"
+        
+        # 构建查询参数
+        params = {}
+        if ts_code:
+            params['ts_code'] = ts_code
+        if trade_date:
+            params['trade_date'] = trade_date
+        if start_date:
+            params['start_date'] = start_date
+        if end_date:
+            params['end_date'] = end_date
+        if fields:
+            params['fields'] = fields
+        
+        # 调用API
+        df = pro.daily_basic(**params)
+        
+        if df.empty:
+            return "未找到符合条件的数据"
+        
+        # 转换为JSON格式返回
+        result = {
+            "data": df.to_dict('records'),
+            "total_count": len(df),
+            "columns": list(df.columns)
+        }
+        
+        return str(result)
+        
+    except Exception as e:
+        return f"查询失败：{str(e)}"
+
+
+def get_tushare_daily_basic_tool():
+    """获取Tushare每日指标工具实例"""
+    return tushare_daily_basic_tool
+
+
+# 导出工具列表
+def get_tushare_tools() -> List:
+    """获取所有Tushare工具的列表"""
+    return [tushare_daily_basic_tool]
+
+
+# 导出工具实例
+TUSHARE_TOOLS = [tushare_daily_basic_tool]

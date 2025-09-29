@@ -25,14 +25,10 @@ import dotenv
 dotenv.load_dotenv()
 
 import os
-from langchain.chat_models import init_chat_model
-
-llm = init_chat_model(
-    model="openai:gpt-4.1-nano",
-    base_url=os.getenv("BASE_URL"),
-)
+from src.llm import get_llm
 
 def chatbot(state: State):
+    llm = get_llm()
     return {"messages": [llm.invoke(state["messages"])]}
 
 
@@ -224,7 +220,6 @@ for event in events:
     messages = event.get("messages") if isinstance(event, dict) else None
     if isinstance(messages, list) and messages:
         last_message = messages[-1]
-        if not _display_message(last_message, "Assistant"):
-            print(f"Assistant: {last_message}")
+        print(f"Assistant: {last_message}")
     else:
         print(f"[values] {event}")

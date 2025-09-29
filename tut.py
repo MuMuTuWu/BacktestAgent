@@ -143,41 +143,17 @@ def _print_stream(events: Iterable[Any]) -> None:
     trailing_stream = False
 
     for chunk in events:
-        if isinstance(chunk, tuple):
-            if len(chunk) == 2 and isinstance(chunk[0], str):
-                mode, payload = chunk
-            elif len(chunk) >= 1 and isinstance(chunk[0], AIMessageChunk):
-                mode, payload = "messages", chunk[0]
-            elif len(chunk) >= 1:
-                mode, payload = "values", chunk[0]
-            else:
-                mode, payload = "values", chunk
-        else:
-            mode = "messages" if isinstance(chunk, AIMessageChunk) else "values"
-            payload = chunk
+        payload = chunk[0] if isinstance(chunk, tuple) and chunk else chunk
 
-        if mode == "messages":
-            if isinstance(payload, tuple):
-                first = payload[0] if payload else None
-                if isinstance(first, AIMessageChunk):
-                    payload = first
-                else:
-                    payload = payload if isinstance(payload, AIMessageChunk) else first
-            if isinstance(payload, AIMessageChunk):
-                text = _flatten_chunk_content(payload)
-                if text:
-                    print(text, end="", flush=True)
-                    trailing_stream = True
+        if isinstance(payload, AIMessageChunk):
+            text = _flatten_chunk_content(payload)
+            if text:
+                print(text, end="", flush=True)
+                trailing_stream = True
             continue
 
         if isinstance(payload, dict) and "messages" in payload:
             payload["messages"][-1].pretty_print()
-            continue
-
-        if isinstance(payload, tuple) and payload:
-            primary = payload[0]
-            if isinstance(primary, dict) and "messages" in primary:
-                primary["messages"][-1].pretty_print()
             continue
 
     if trailing_stream:
@@ -187,7 +163,7 @@ def _print_stream(events: Iterable[Any]) -> None:
 events = graph.stream(
     {"messages": [{"role": "user", "content": user_input}]},
     config,
-    stream_mode=["values", "messages"],
+    stream_mode="values",
 )
 _print_stream(events)
 
@@ -202,7 +178,7 @@ human_command = Command(
 events = graph.stream(
     human_command,
     config,
-    stream_mode=["values", "messages"],
+    stream_mode="values",
 )
 _print_stream(events)
 # %%

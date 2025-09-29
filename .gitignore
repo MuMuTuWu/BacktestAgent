@@ -11,3 +11,7 @@ wheels/
 
 # 环境变量文件
 .env
+
+# 数据文件
+*.csv
+*.parquet

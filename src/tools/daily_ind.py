@@ -10,6 +10,8 @@ from langchain_core.tools import tool
 import pandas as pd
 from pathlib import Path
 
+from ..state import GLOBAL_DATA_STATE
+
 
 @tool("tushare_daily_basic")
 def tushare_daily_basic_tool(
@@ -71,21 +73,49 @@ def tushare_daily_basic_tool(
         if end_date:
             df = df[df['trade_date'] <= str(end_date)]
         
-        # 选择指定字段
+        # 确定需要保留的字段（必须包含 ts_code 和 trade_date）
+        base_fields = ['ts_code', 'trade_date']
         if fields:
             field_list = [f.strip() for f in fields.split(',')]
-            available_fields = [f for f in field_list if f in df.columns]
-            if available_fields:
-                df = df[available_fields]
+            # 数据字段（排除索引字段）
+            data_fields = [f for f in field_list if f in df.columns and f not in base_fields]
+        else:
+            # 如果未指定字段，使用所有非索引字段
+            data_fields = [col for col in df.columns if col not in base_fields]
+        
+        # 确保 DataFrame 包含必要的列
+        required_cols = base_fields + data_fields
+        df = df[required_cols]
         
         if df.empty:
             return "未找到符合条件的数据"
         
+        # 对每个数据字段进行 pivot 转换并存入 GlobalDataState
+        pivot_dfs = {}
+        for field in data_fields:
+            try:
+                # pivot: index=trade_date, columns=ts_code, values=field
+                pivot_df = df.pivot(index='trade_date', columns='ts_code', values=field)
+                # 将 index 转换为日期格式以便排序
+                pivot_df.index = pd.to_datetime(pivot_df.index, format='%Y%m%d')
+                pivot_df = pivot_df.sort_index()
+                pivot_dfs[field] = pivot_df
+            except Exception as e:
+                # 如果 pivot 失败（如有重复数据），记录错误但继续处理其他字段
+                print(f"警告：字段 {field} pivot 失败: {str(e)}")
+                continue
+        
+        # 将 pivot 后的 DataFrames 存入 GlobalDataState.indicators
+        if pivot_dfs:
+            GLOBAL_DATA_STATE.update('indicators', pivot_dfs)
+        
         # 转换为JSON格式返回
         result = {
-            "data": df.to_dict('records'),
+            "message": f"成功加载 {len(pivot_dfs)} 个指标到 GlobalDataState.indicators",
+            "indicators": list(pivot_dfs.keys()),
+            "shape": {field: {"rows": df.shape[0], "cols": df.shape[1]} 
+                      for field, df in pivot_dfs.items()},
             "total_count": len(df),
-            "columns": list(df.columns)
         }
         
         return str(result)

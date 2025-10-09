@@ -1,123 +1,91 @@
 """
-LangChain工具：获取A股日线行情（通过Tushare pro_bar接口）
+LangChain工具：获取A股日线行情（从本地parquet文件读取）
 """
 
 from typing import Optional, List, Dict, Any, Annotated
+from pathlib import Path
 
 import pandas as pd
-import tushare as ts
 from langchain_core.tools import tool
 
-from .utils import _init_tushare_api
-
-
-def _parse_comma_separated(value: Optional[str]) -> Optional[List[str]]:
-    """将逗号分隔的字符串转换为字符串列表"""
-    if not value:
-        return None
-    items = [item.strip() for item in value.split(",") if item.strip()]
-    return items or None
-
-
-def _parse_ma_list(value: Optional[str]) -> Optional[List[int]]:
-    """将逗号分隔的字符串转换为整数列表，用于ma参数"""
-    items = _parse_comma_separated(value)
-    if not items:
-        return None
-    ma_values: List[int] = []
-    for item in items:
-        try:
-            ma_values.append(int(item))
-        except ValueError as exc:
-            raise ValueError(f"ma参数必须是整数，无法解析：{item}") from exc
-    return ma_values
-
-
-def _parse_bool(value: Any) -> Optional[bool]:
-    """解析布尔参数，支持bool与字符串形式"""
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"true", "1", "yes", "y"}:
-            return True
-        if normalized in {"false", "0", "no", "n"}:
-            return False
-    raise ValueError(f"无法解析布尔值：{value}")
+from ..state import GLOBAL_DATA_STATE
 
 
 @tool("tushare_daily_bar")
 def tushare_daily_bar_tool(
-    ts_code: Annotated[str, "股票代码，例如：000001.SZ"] = "",
+    ts_code: Annotated[str, "股票代码，例如：000001.SZ"] = None,
     start_date: Annotated[Optional[str], "开始日期，格式YYYYMMDD"] = None,
     end_date: Annotated[Optional[str], "结束日期，格式YYYYMMDD"] = None,
-    trade_date: Annotated[Optional[str], "单个交易日，格式YYYYMMDD"] = None,
-    adj: Annotated[Optional[str], "复权类型：None/qfq/hfq"] = None,
-    asset: Annotated[str, "资产类别，股票默认E"] = "E",
-    freq: Annotated[str, "数据频度，默认D(日线)"] = "D",
-    ma: Annotated[Optional[str], "均线参数，逗号分隔，例如：'5,10,20'"] = None,
-    factors: Annotated[Optional[str], "股票因子，逗号分隔，例如：'tor,vr'"] = None,
-    adjfactor: Annotated[Optional[Any], "是否返回复权因子，True/False"] = False,
 ) -> str:
-    """调用Tushare的pro_bar接口，获取A股日线行情数据。
+    """获取A股日线行情数据（OHLCV）。
 
-    核心字段包括：ts_code、trade_date、open、high、low、close、pre_close、change、pct_chg、vol、amount。
-    支持传入trade_date快速获取某一交易日的行情，详细参数说明参考docs/daily.md与docs/pro_bar.md。
+    输入参数：
+    - ts_code: 股票代码（可选），例如：000001.SZ
+    - start_date: 开始日期（可选），格式YYYYMMDD
+    - end_date: 结束日期（可选），格式YYYYMMDD
+    
+    核心字段包括：ts_code、trade_date、open、high、low、close、vol（成交量）。
+    数据会被pivot转换后存入GlobalDataState.ohlcv，每个字段一个DataFrame。
     """
     try:
-        if not ts_code:
-            return "错误：ts_code为必填参数"
-
-        # 确保已初始化Tushare token
-        _init_tushare_api()
-
-        params: Dict[str, Any] = {
-            "ts_code": ts_code,
-            "asset": asset or "E",
-            "freq": freq or "D",
-        }
-
-        if trade_date and (start_date or end_date):
-            return "错误：trade_date不能与start_date或end_date同时使用"
-
+        # 从本地文件读取数据
+        data_path = Path(__file__).parent.parent.parent / "data" / "20240901-20250901" / "hs300_pro_bar_daily.parquet"
+        
+        if not data_path.exists():
+            return f"错误：数据文件不存在 {data_path}"
+        
+        # 读取parquet文件
+        df = pd.read_parquet(data_path)
+        
+        # 根据参数筛选数据
+        if ts_code:
+            df = df[df['ts_code'] == ts_code]
+        
         if start_date:
-            params["start_date"] = start_date
+            df = df[df['trade_date'] >= str(start_date)]
+        
         if end_date:
-            params["end_date"] = end_date
-        if trade_date:
-            params["start_date"] = trade_date
-            params["end_date"] = trade_date
-        if adj:
-            params["adj"] = adj
-
-        parsed_adjfactor = _parse_bool(adjfactor)
-        if parsed_adjfactor is not None:
-            params["adjfactor"] = parsed_adjfactor
-
-        ma_list = _parse_ma_list(ma)
-        if ma_list:
-            params["ma"] = ma_list
-
-        factors_list = _parse_comma_separated(factors)
-        if factors_list:
-            params["factors"] = factors_list
-
-        df = ts.pro_bar(**params)
-
-        if df is None or df.empty:
+            df = df[df['trade_date'] <= str(end_date)]
+        
+        if df.empty:
             return "未找到符合条件的数据"
-
-        df = df.reset_index()
-        if "trade_date" in df.columns:
-            df = df.sort_values("trade_date", ignore_index=True)
-
+        
+        # OHLCV字段
+        ohlcv_fields = ['open', 'high', 'low', 'close', 'vol']
+        base_fields = ['ts_code', 'trade_date']
+        
+        # 确保 DataFrame 包含必要的列
+        required_cols = base_fields + ohlcv_fields
+        df = df[required_cols]
+        
+        # 对每个OHLCV字段进行 pivot 转换并存入 GlobalDataState.ohlcv
+        pivot_dfs = {}
+        for field in ohlcv_fields:
+            try:
+                # pivot: index=trade_date, columns=ts_code, values=field
+                pivot_df = df.pivot(index='trade_date', columns='ts_code', values=field)
+                # 将 index 转换为日期格式以便排序
+                pivot_df.index = pd.to_datetime(pivot_df.index, format='%Y%m%d')
+                pivot_df = pivot_df.sort_index()
+                pivot_dfs[field] = pivot_df
+            except Exception as e:
+                # 如果 pivot 失败（如有重复数据），记录错误但继续处理其他字段
+                print(f"警告：字段 {field} pivot 失败: {str(e)}")
+                continue
+        
+        # 将 pivot 后的 DataFrames 存入 GlobalDataState.ohlcv
+        if pivot_dfs:
+            GLOBAL_DATA_STATE.update('ohlcv', pivot_dfs)
+        
+        # 转换为JSON格式返回
         result = {
-            "data": df.to_dict("records"),
+            "message": f"成功加载 {len(pivot_dfs)} 个OHLCV字段到 GlobalDataState.ohlcv",
+            "fields": list(pivot_dfs.keys()),
+            "shape": {field: {"rows": df.shape[0], "cols": df.shape[1]} 
+                      for field, df in pivot_dfs.items()},
             "total_count": len(df),
-            "columns": list(df.columns),
         }
+        
         return str(result)
 
     except Exception as exc:  # pylint: disable=broad-except

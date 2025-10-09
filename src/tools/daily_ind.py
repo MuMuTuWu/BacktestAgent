@@ -16,7 +16,6 @@ from ..state import GLOBAL_DATA_STATE
 @tool("tushare_daily_basic")
 def tushare_daily_basic_tool(
     ts_code: Annotated[str, "股票代码，例如：000001.SZ"] = None,
-    trade_date: Annotated[Optional[str], "交易日期，格式YYYYMMDD，例如：20240101"] = None,
     start_date: Annotated[Optional[str], "开始日期，格式YYYYMMDD"] = None,
     end_date: Annotated[Optional[str], "结束日期，格式YYYYMMDD"] = None,
     fields: Annotated[Optional[str], "指定返回的字段，例如：'ts_code,trade_date,close,pe,pb'，如果为空则返回所有字段"] = None
@@ -25,7 +24,6 @@ def tushare_daily_basic_tool(
     
     输入参数：
     - ts_code: 股票代码（可选），例如：000001.SZ
-    - trade_date: 交易日期（可选），格式YYYYMMDD，例如：20240101
     - start_date: 开始日期（可选），格式YYYYMMDD
     - end_date: 结束日期（可选），格式YYYYMMDD  
     - fields: 指定返回字段（可选），例如：'ts_code,trade_date,close,pe,pb'
@@ -63,9 +61,6 @@ def tushare_daily_basic_tool(
         # 根据参数筛选数据
         if ts_code:
             df = df[df['ts_code'] == ts_code]
-        
-        if trade_date:
-            df = df[df['trade_date'] == str(trade_date)]
         
         if start_date:
             df = df[df['trade_date'] >= str(start_date)]

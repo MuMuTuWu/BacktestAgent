@@ -7,10 +7,8 @@ Tushare数据获取工具
 import os
 from typing import Optional, List, Dict, Any, Annotated
 from langchain_core.tools import tool
-import tushare as ts
 import pandas as pd
-
-from .utils import _init_tushare_api
+from pathlib import Path
 
 
 @tool("tushare_daily_basic")
@@ -51,28 +49,34 @@ def tushare_daily_basic_tool(
     - circ_mv: 流通市值（万元）
     """
     try:
-        # 确保API已初始化
-        pro = _init_tushare_api()
+        # 从本地文件读取数据
+        data_path = Path(__file__).parent.parent.parent / "data" / "20240901-20250901" / "daily_ind.parquet"
         
-        # 验证参数
-        if not ts_code and not trade_date:
-            return "错误：ts_code和trade_date必须至少提供一个"
+        if not data_path.exists():
+            return f"错误：数据文件不存在 {data_path}"
         
-        # 构建查询参数
-        params = {}
+        # 读取parquet文件
+        df = pd.read_parquet(data_path)
+        
+        # 根据参数筛选数据
         if ts_code:
-            params['ts_code'] = ts_code
-        if trade_date:
-            params['trade_date'] = trade_date
-        if start_date:
-            params['start_date'] = start_date
-        if end_date:
-            params['end_date'] = end_date
-        if fields:
-            params['fields'] = fields
+            df = df[df['ts_code'] == ts_code]
         
-        # 调用API
-        df = pro.daily_basic(**params)
+        if trade_date:
+            df = df[df['trade_date'] == str(trade_date)]
+        
+        if start_date:
+            df = df[df['trade_date'] >= str(start_date)]
+        
+        if end_date:
+            df = df[df['trade_date'] <= str(end_date)]
+        
+        # 选择指定字段
+        if fields:
+            field_list = [f.strip() for f in fields.split(',')]
+            available_fields = [f for f in field_list if f in df.columns]
+            if available_fields:
+                df = df[available_fields]
         
         if df.empty:
             return "未找到符合条件的数据"

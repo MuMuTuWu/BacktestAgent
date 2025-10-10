@@ -34,6 +34,8 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
         
         # 当前节点名称（用于上下文追踪）
         self.current_node: Optional[str] = None
+        # 当前工具名称（用于上下文追踪）
+        self.current_tool: Optional[str] = None
         
         # 初始化日志文件
         self._init_log_files()
@@ -209,6 +211,7 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
         """工具开始调用时的回调"""
         try:
             tool_name = serialized.get('name', 'unknown') if serialized else 'unknown'
+            self.current_tool = tool_name
             self._write_text(f"\n[工具] 开始调用: {tool_name}")
             self._write_text(f"  输入: {input_str}")
             
@@ -222,19 +225,25 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
     def on_tool_end(self, output: str, **kwargs: Any) -> None:
         """工具调用结束时的回调"""
         try:
-            self._write_text(f"[工具] 调用结束")
-            
             # 转换输出为字符串（可能是ToolMessage对象）
             output_str = str(output) if not isinstance(output, str) else output
             
             # 限制输出长度
             if len(output_str) > 200:
-                output_preview = output_str[:100] + "\n...\n" + output_str[-100:]
+                content_preview = output_str[:100] + "\n...\n" + output_str[-100:]
             else:
-                output_preview = output_str
-            self._write_text(f"  输出: {output_preview}")
+                content_preview = output_str
             
-            self._write_jsonl("tool_end", {"output": output_str})
+            # 输出工具名称和内容
+            tool_name = self.current_tool if self.current_tool else 'unknown'
+            self._write_text(f"[工具] 调用结束")
+            self._write_text(f"  name: {tool_name}")
+            self._write_text(f"  content: {content_preview}")
+            
+            self._write_jsonl("tool_end", {
+                "tool_name": tool_name,
+                "output": output_str
+            })
         except Exception as e:
             self._write_text(f"[ERROR] Tool end logging failed: {e}")
     

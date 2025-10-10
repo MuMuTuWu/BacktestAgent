@@ -61,7 +61,7 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
         }
         
         with open(self.jsonl_log, 'a', encoding='utf-8') as f:
-            f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
+            f.write(json.dumps(log_entry, ensure_ascii=False, indent=2) + '\n')
     
     def _write_text(self, message: str):
         """写入人类可读的文本日志"""

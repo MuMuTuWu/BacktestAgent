@@ -25,9 +25,10 @@ class GlobalDataState:
     ohlcv: DataFrameMap = field(default_factory=dict)
     indicators: DataFrameMap = field(default_factory=dict)
     signal: DataFrameMap = field(default_factory=dict)
+    backtest_results: DataFrameMap = field(default_factory=dict)
 
     _lock: RLock = field(default_factory=RLock, repr=False)
-    _DICT_FIELDS: tuple[str, ...] = ("ohlcv", "indicators", "signal")
+    _DICT_FIELDS: tuple[str, ...] = ("ohlcv", "indicators", "signal", "backtest_results")
 
     def override(self, **entries: dict[str, Any] | None) -> None:
         """Override provided dict fields atomically."""

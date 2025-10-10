@@ -16,4 +16,6 @@ dependencies = [
     "langgraph>=0.6.7",
     "langgraph-cli[inmem]>=0.4.2",
     "pyarrow>=21.0.0",
+    "quantstats>=0.0.62",
+    "vectorbt>=0.26.0",
 ]

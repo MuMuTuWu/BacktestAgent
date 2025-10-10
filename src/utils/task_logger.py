@@ -167,7 +167,7 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
                         tool_args = getattr(tool_call, 'args', {})
                     
                     self._write_text(f"    工具名: {tool_name}")
-                    args_str = json.dumps(tool_args, ensure_ascii=False) if isinstance(tool_args, (dict, list)) else str(tool_args)
+                    args_str = json.dumps(tool_args, ensure_ascii=False, indent=2) if isinstance(tool_args, (dict, list)) else str(tool_args)
                     if len(args_str) > 200:
                         args_preview = args_str[:100] + "\n...\n" + args_str[-100:]
                     else:

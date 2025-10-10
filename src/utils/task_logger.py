@@ -63,9 +63,8 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
     
     def _write_text(self, message: str):
         """写入人类可读的文本日志"""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(self.text_log, 'a', encoding='utf-8') as f:
-            f.write(f"[{timestamp}] {message}\n")
+            f.write(f"{message}\n")
     
     def set_current_node(self, node_name: str):
         """设置当前执行的节点名称"""
@@ -121,7 +120,10 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
             for i, prompt in enumerate(prompts):
                 self._write_text(f"  提示词 [{i+1}]:")
                 # 限制长度，避免日志过大
-                prompt_preview = prompt[:500] + "..." if len(prompt) > 500 else prompt
+                if len(prompt) > 200:
+                    prompt_preview = prompt[:100] + "\n...\n" + prompt[-100:]
+                else:
+                    prompt_preview = prompt
                 for line in prompt_preview.split('\n'):
                     self._write_text(f"    {line}")
             
@@ -143,7 +145,10 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
             self._write_text(f"[LLM] 调用结束")
             
             # 记录输出
-            output_preview = output_text[:500] + "..." if len(output_text) > 500 else output_text
+            if len(output_text) > 200:
+                output_preview = output_text[:100] + "\n...\n" + output_text[-100:]
+            else:
+                output_preview = output_text
             self._write_text(f"  输出:")
             for line in output_preview.split('\n'):
                 self._write_text(f"    {line}")
@@ -194,7 +199,10 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
             output_str = str(output) if not isinstance(output, str) else output
             
             # 限制输出长度
-            output_preview = output_str[:500] + "..." if len(output_str) > 500 else output_str
+            if len(output_str) > 200:
+                output_preview = output_str[:100] + "\n...\n" + output_str[-100:]
+            else:
+                output_preview = output_str
             self._write_text(f"  输出: {output_preview}")
             
             self._write_jsonl("tool_end", {"output": output_str})
@@ -209,33 +217,11 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
     # Agent回调方法
     def on_agent_action(self, action: AgentAction, **kwargs: Any) -> None:
         """Agent执行动作时的回调"""
-        try:
-            self._write_text(f"\n[Agent] 决策动作: {action.tool}")
-            self._write_text(f"  工具输入: {action.tool_input}")
-            if action.log:
-                log_preview = action.log[:300] + "..." if len(action.log) > 300 else action.log
-                self._write_text(f"  推理日志: {log_preview}")
-            
-            self._write_jsonl("agent_action", {
-                "tool": action.tool,
-                "tool_input": action.tool_input,
-                "log": action.log
-            })
-        except Exception as e:
-            self._write_text(f"[ERROR] Agent action logging failed: {e}")
+        pass
     
     def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> None:
         """Agent完成时的回调"""
-        try:
-            self._write_text(f"\n[Agent] 执行完成")
-            self._write_text(f"  返回值: {finish.return_values}")
-            
-            self._write_jsonl("agent_finish", {
-                "return_values": finish.return_values,
-                "log": finish.log
-            })
-        except Exception as e:
-            self._write_text(f"[ERROR] Agent finish logging failed: {e}")
+        pass
     
     # Chain回调方法
     def on_chain_start(
@@ -245,39 +231,12 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
         **kwargs: Any
     ) -> None:
         """Chain开始执行时的回调"""
-        try:
-            chain_name = serialized.get('name', 'unknown') if serialized else 'unknown'
-            self._write_text(f"\n[Chain] 开始执行: {chain_name}")
-            
-            # 处理inputs可能不是字典的情况
-            inputs_info = list(inputs.keys()) if isinstance(inputs, dict) else str(type(inputs).__name__)
-            
-            self._write_jsonl("chain_start", {
-                "chain_name": chain_name,
-                "inputs_keys": inputs_info
-            })
-        except Exception as e:
-            self._write_text(f"[ERROR] Chain start logging failed: {e}")
-    
+        pass
+
     def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> None:
         """Chain执行结束时的回调"""
-        try:
-            self._write_text(f"[Chain] 执行结束")
-            
-            # 处理outputs可能不是字典的情况
-            if isinstance(outputs, dict):
-                outputs_info = list(outputs.keys())
-            elif isinstance(outputs, (list, tuple)):
-                outputs_info = f"<{len(outputs)} items>"
-            else:
-                outputs_info = str(type(outputs).__name__)
-            
-            self._write_jsonl("chain_end", {
-                "outputs_keys": outputs_info
-            })
-        except Exception as e:
-            self._write_text(f"[ERROR] Chain end logging failed: {e}")
-    
+        pass
+
     def on_chain_error(self, error: Exception, **kwargs: Any) -> None:
         """Chain执行出错时的回调"""
         self._write_text(f"[Chain] 执行出错: {str(error)}")

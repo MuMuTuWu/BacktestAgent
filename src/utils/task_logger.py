@@ -144,22 +144,51 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
             
             self._write_text(f"[LLM] 调用结束")
             
-            # 记录输出
-            if len(output_text) > 200:
-                output_preview = output_text[:100] + "\n...\n" + output_text[-100:]
+            # 检查是否有工具调用
+            tool_calls = None
+            if generations and hasattr(generations[0], 'message'):
+                message = generations[0].message
+                if hasattr(message, 'tool_calls') and message.tool_calls:
+                    tool_calls = message.tool_calls
+                elif hasattr(message, 'additional_kwargs'):
+                    tool_calls = message.additional_kwargs.get('tool_calls')
+            
+            # 如果content为空但有工具调用，记录工具信息
+            if not output_text.strip() and tool_calls:
+                self._write_text(f"  工具调用:")
+                for tool_call in tool_calls:
+                    if isinstance(tool_call, dict):
+                        tool_name = tool_call.get('function', {}).get('name', tool_call.get('name', 'unknown'))
+                        tool_args = tool_call.get('function', {}).get('arguments', tool_call.get('args', {}))
+                    else:
+                        tool_name = getattr(tool_call, 'name', 'unknown')
+                        tool_args = getattr(tool_call, 'args', {})
+                    
+                    self._write_text(f"    工具名: {tool_name}")
+                    args_str = json.dumps(tool_args, ensure_ascii=False) if isinstance(tool_args, (dict, list)) else str(tool_args)
+                    if len(args_str) > 200:
+                        args_preview = args_str[:100] + "\n...\n" + args_str[-100:]
+                    else:
+                        args_preview = args_str
+                    self._write_text(f"    参数: {args_preview}")
             else:
-                output_preview = output_text
-            self._write_text(f"  输出:")
-            for line in output_preview.split('\n'):
-                self._write_text(f"    {line}")
+                # 记录普通文本输出
+                if len(output_text) > 200:
+                    output_preview = output_text[:100] + "\n...\n" + output_text[-100:]
+                else:
+                    output_preview = output_text
+                self._write_text(f"  输出:")
+                for line in output_preview.split('\n'):
+                    self._write_text(f"    {line}")
             
             # 记录token使用情况
-            if response.llm_output and 'token_usage' in response.llm_output:
-                token_usage = response.llm_output['token_usage']
-                self._write_text(f"  Token使用: {token_usage}")
+            # if response.llm_output and 'token_usage' in response.llm_output:
+            #     token_usage = response.llm_output['token_usage']
+            #     self._write_text(f"  Token使用: {token_usage}")
             
             self._write_jsonl("llm_end", {
                 "output": output_text,
+                "tool_calls": tool_calls,
                 "token_usage": response.llm_output.get('token_usage') if response.llm_output else None
             })
         except Exception as e:

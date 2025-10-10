@@ -112,46 +112,53 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
         **kwargs: Any
     ) -> None:
         """LLM开始调用时的回调"""
-        self._write_text(f"\n[LLM] 开始调用")
-        self._write_text(f"  模型: {serialized.get('name', 'unknown')}")
-        
-        # 记录提示词
-        for i, prompt in enumerate(prompts):
-            self._write_text(f"  提示词 [{i+1}]:")
-            # 限制长度，避免日志过大
-            prompt_preview = prompt[:500] + "..." if len(prompt) > 500 else prompt
-            for line in prompt_preview.split('\n'):
-                self._write_text(f"    {line}")
-        
-        self._write_jsonl("llm_start", {
-            "model": serialized.get('name', 'unknown'),
-            "prompts": prompts,
-            "invocation_params": kwargs.get('invocation_params', {})
-        })
+        try:
+            self._write_text(f"\n[LLM] 开始调用")
+            model_name = serialized.get('name', 'unknown') if serialized else 'unknown'
+            self._write_text(f"  模型: {model_name}")
+            
+            # 记录提示词
+            for i, prompt in enumerate(prompts):
+                self._write_text(f"  提示词 [{i+1}]:")
+                # 限制长度，避免日志过大
+                prompt_preview = prompt[:500] + "..." if len(prompt) > 500 else prompt
+                for line in prompt_preview.split('\n'):
+                    self._write_text(f"    {line}")
+            
+            self._write_jsonl("llm_start", {
+                "model": model_name,
+                "prompts": prompts,
+                "invocation_params": kwargs.get('invocation_params', {})
+            })
+        except Exception as e:
+            self._write_text(f"[ERROR] LLM start logging failed: {e}")
     
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
         """LLM调用结束时的回调"""
-        # 提取响应内容
-        generations = response.generations[0] if response.generations else []
-        output_text = generations[0].text if generations else ""
-        
-        self._write_text(f"[LLM] 调用结束")
-        
-        # 记录输出
-        output_preview = output_text[:500] + "..." if len(output_text) > 500 else output_text
-        self._write_text(f"  输出:")
-        for line in output_preview.split('\n'):
-            self._write_text(f"    {line}")
-        
-        # 记录token使用情况
-        if response.llm_output and 'token_usage' in response.llm_output:
-            token_usage = response.llm_output['token_usage']
-            self._write_text(f"  Token使用: {token_usage}")
-        
-        self._write_jsonl("llm_end", {
-            "output": output_text,
-            "token_usage": response.llm_output.get('token_usage') if response.llm_output else None
-        })
+        try:
+            # 提取响应内容
+            generations = response.generations[0] if response.generations else []
+            output_text = generations[0].text if generations else ""
+            
+            self._write_text(f"[LLM] 调用结束")
+            
+            # 记录输出
+            output_preview = output_text[:500] + "..." if len(output_text) > 500 else output_text
+            self._write_text(f"  输出:")
+            for line in output_preview.split('\n'):
+                self._write_text(f"    {line}")
+            
+            # 记录token使用情况
+            if response.llm_output and 'token_usage' in response.llm_output:
+                token_usage = response.llm_output['token_usage']
+                self._write_text(f"  Token使用: {token_usage}")
+            
+            self._write_jsonl("llm_end", {
+                "output": output_text,
+                "token_usage": response.llm_output.get('token_usage') if response.llm_output else None
+            })
+        except Exception as e:
+            self._write_text(f"[ERROR] LLM end logging failed: {e}")
     
     def on_llm_error(self, error: Exception, **kwargs: Any) -> None:
         """LLM调用出错时的回调"""
@@ -166,24 +173,33 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
         **kwargs: Any
     ) -> None:
         """工具开始调用时的回调"""
-        tool_name = serialized.get('name', 'unknown')
-        self._write_text(f"\n[工具] 开始调用: {tool_name}")
-        self._write_text(f"  输入: {input_str}")
-        
-        self._write_jsonl("tool_start", {
-            "tool_name": tool_name,
-            "input": input_str
-        })
+        try:
+            tool_name = serialized.get('name', 'unknown') if serialized else 'unknown'
+            self._write_text(f"\n[工具] 开始调用: {tool_name}")
+            self._write_text(f"  输入: {input_str}")
+            
+            self._write_jsonl("tool_start", {
+                "tool_name": tool_name,
+                "input": input_str
+            })
+        except Exception as e:
+            self._write_text(f"[ERROR] Tool start logging failed: {e}")
     
     def on_tool_end(self, output: str, **kwargs: Any) -> None:
         """工具调用结束时的回调"""
-        self._write_text(f"[工具] 调用结束")
-        
-        # 限制输出长度
-        output_preview = output[:500] + "..." if len(output) > 500 else output
-        self._write_text(f"  输出: {output_preview}")
-        
-        self._write_jsonl("tool_end", {"output": output})
+        try:
+            self._write_text(f"[工具] 调用结束")
+            
+            # 转换输出为字符串（可能是ToolMessage对象）
+            output_str = str(output) if not isinstance(output, str) else output
+            
+            # 限制输出长度
+            output_preview = output_str[:500] + "..." if len(output_str) > 500 else output_str
+            self._write_text(f"  输出: {output_preview}")
+            
+            self._write_jsonl("tool_end", {"output": output_str})
+        except Exception as e:
+            self._write_text(f"[ERROR] Tool end logging failed: {e}")
     
     def on_tool_error(self, error: Exception, **kwargs: Any) -> None:
         """工具调用出错时的回调"""
@@ -193,27 +209,33 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
     # Agent回调方法
     def on_agent_action(self, action: AgentAction, **kwargs: Any) -> None:
         """Agent执行动作时的回调"""
-        self._write_text(f"\n[Agent] 决策动作: {action.tool}")
-        self._write_text(f"  工具输入: {action.tool_input}")
-        if action.log:
-            log_preview = action.log[:300] + "..." if len(action.log) > 300 else action.log
-            self._write_text(f"  推理日志: {log_preview}")
-        
-        self._write_jsonl("agent_action", {
-            "tool": action.tool,
-            "tool_input": action.tool_input,
-            "log": action.log
-        })
+        try:
+            self._write_text(f"\n[Agent] 决策动作: {action.tool}")
+            self._write_text(f"  工具输入: {action.tool_input}")
+            if action.log:
+                log_preview = action.log[:300] + "..." if len(action.log) > 300 else action.log
+                self._write_text(f"  推理日志: {log_preview}")
+            
+            self._write_jsonl("agent_action", {
+                "tool": action.tool,
+                "tool_input": action.tool_input,
+                "log": action.log
+            })
+        except Exception as e:
+            self._write_text(f"[ERROR] Agent action logging failed: {e}")
     
     def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> None:
         """Agent完成时的回调"""
-        self._write_text(f"\n[Agent] 执行完成")
-        self._write_text(f"  返回值: {finish.return_values}")
-        
-        self._write_jsonl("agent_finish", {
-            "return_values": finish.return_values,
-            "log": finish.log
-        })
+        try:
+            self._write_text(f"\n[Agent] 执行完成")
+            self._write_text(f"  返回值: {finish.return_values}")
+            
+            self._write_jsonl("agent_finish", {
+                "return_values": finish.return_values,
+                "log": finish.log
+            })
+        except Exception as e:
+            self._write_text(f"[ERROR] Agent finish logging failed: {e}")
     
     # Chain回调方法
     def on_chain_start(
@@ -223,21 +245,38 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
         **kwargs: Any
     ) -> None:
         """Chain开始执行时的回调"""
-        chain_name = serialized.get('name', 'unknown')
-        self._write_text(f"\n[Chain] 开始执行: {chain_name}")
-        
-        self._write_jsonl("chain_start", {
-            "chain_name": chain_name,
-            "inputs_keys": list(inputs.keys())
-        })
+        try:
+            chain_name = serialized.get('name', 'unknown') if serialized else 'unknown'
+            self._write_text(f"\n[Chain] 开始执行: {chain_name}")
+            
+            # 处理inputs可能不是字典的情况
+            inputs_info = list(inputs.keys()) if isinstance(inputs, dict) else str(type(inputs).__name__)
+            
+            self._write_jsonl("chain_start", {
+                "chain_name": chain_name,
+                "inputs_keys": inputs_info
+            })
+        except Exception as e:
+            self._write_text(f"[ERROR] Chain start logging failed: {e}")
     
     def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> None:
         """Chain执行结束时的回调"""
-        self._write_text(f"[Chain] 执行结束")
-        
-        self._write_jsonl("chain_end", {
-            "outputs_keys": list(outputs.keys())
-        })
+        try:
+            self._write_text(f"[Chain] 执行结束")
+            
+            # 处理outputs可能不是字典的情况
+            if isinstance(outputs, dict):
+                outputs_info = list(outputs.keys())
+            elif isinstance(outputs, (list, tuple)):
+                outputs_info = f"<{len(outputs)} items>"
+            else:
+                outputs_info = str(type(outputs).__name__)
+            
+            self._write_jsonl("chain_end", {
+                "outputs_keys": outputs_info
+            })
+        except Exception as e:
+            self._write_text(f"[ERROR] Chain end logging failed: {e}")
     
     def on_chain_error(self, error: Exception, **kwargs: Any) -> None:
         """Chain执行出错时的回调"""

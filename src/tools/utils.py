@@ -38,5 +38,5 @@ def print_llm_api_content(tool):
     print(f"name: {tool.name}")
     print(f"description: {tool.description}")
     print("=" * 50)
-    schema = tool.args_schema.model_json_schema()
+    schema = tool.tool_call_schema.model_json_schema()
     print(json.dumps(schema, indent=2, ensure_ascii=False))

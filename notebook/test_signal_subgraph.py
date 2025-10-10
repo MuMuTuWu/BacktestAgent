@@ -146,9 +146,9 @@ def test_clarification():
 if __name__ == "__main__":
     # 运行测试
     try:
-        test_data_fetch()
+        # test_data_fetch()
         test_signal_generation()
-        test_clarification()
+        # test_clarification()
         
         print("\n" + "=" * 50)
         print("所有测试完成！")

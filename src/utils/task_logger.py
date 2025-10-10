@@ -122,8 +122,8 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
             for i, prompt in enumerate(prompts):
                 self._write_text(f"  提示词 [{i+1}]:")
                 # 限制长度，避免日志过大
-                if len(prompt) > 200:
-                    prompt_preview = prompt[:100] + "\n...\n" + prompt[-100:]
+                if len(prompt) > 400:
+                    prompt_preview = prompt[:200] + "\n...\n" + prompt[-200:]
                 else:
                     prompt_preview = prompt
                 for line in prompt_preview.split('\n'):
@@ -168,15 +168,15 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
                     
                     self._write_text(f"    工具名: {tool_name}")
                     args_str = json.dumps(tool_args, ensure_ascii=False, indent=2) if isinstance(tool_args, (dict, list)) else str(tool_args)
-                    if len(args_str) > 200:
-                        args_preview = args_str[:100] + "\n...\n" + args_str[-100:]
+                    if len(args_str) > 400:
+                        args_preview = args_str[:200] + "\n...\n" + args_str[-200:]
                     else:
                         args_preview = args_str
                     self._write_text(f"    参数: {args_preview}")
             else:
                 # 记录普通文本输出
-                if len(output_text) > 200:
-                    output_preview = output_text[:100] + "\n...\n" + output_text[-100:]
+                if len(output_text) > 400:
+                    output_preview = output_text[:200] + "\n...\n" + output_text[-200:]
                 else:
                     output_preview = output_text
                 self._write_text(f"  输出:")
@@ -226,11 +226,11 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
         """工具调用结束时的回调"""
         try:
             # 转换输出为字符串（可能是ToolMessage对象）
-            output_str = str(output) if not isinstance(output, str) else output
+            output_str = str(output.content) if not isinstance(output, str) else output
             
             # 限制输出长度
-            if len(output_str) > 200:
-                content_preview = output_str[:100] + "\n...\n" + output_str[-100:]
+            if len(output_str) > 400:
+                content_preview = output_str[:200] + "\n...\n" + output_str[-200:]
             else:
                 content_preview = output_str
             

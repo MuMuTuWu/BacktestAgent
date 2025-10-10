@@ -4,7 +4,7 @@ from langchain_core.tools import tool
 # 导入工具函数
 try:
     # 相对导入（当作为模块导入时）
-    from .tools.utils import print_llm_api_content
+    from .utils import print_llm_api_content
 except ImportError:
     # 绝对导入（当直接运行时）
     import sys

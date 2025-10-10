@@ -204,8 +204,11 @@ uv run notebook/test_signal_subgraph.py
 src/subgraphs/signal/
 ├── __init__.py          # 模块导出
 ├── state.py             # State定义
-├── prompts.py           # Prompt模板
-├── nodes.py             # 节点实现
+├── reflection.py        # 反思节点（包含节点实现和Prompt）
+├── data_fetch.py        # 数据获取节点（包含节点实现和Prompt）
+├── signal_generate.py   # 信号生成节点（包含节点实现和Prompt）
+├── clarify.py           # 澄清节点（包含节点实现和Prompt）
+├── validation.py        # 验证节点（包含节点实现和Prompt）
 ├── routes.py            # 路由函数
 ├── graph.py             # 子图构建
 └── README.md            # 使用说明

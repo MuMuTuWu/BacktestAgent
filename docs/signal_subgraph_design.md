@@ -1598,3 +1598,25 @@ def create_signal_subgraph():
 5. **数据质量保障**：多层验证确保数据和信号质量
 
 该方案充分利用了LangGraph的能力，实现了一个稳健、灵活、易扩展的信号生成系统。
+
+## 代码组织结构
+
+每个节点的实现和对应的Prompt模板都放在独立的文件中，便于维护和扩展：
+
+```
+src/subgraphs/signal/
+├── __init__.py          # 模块导出
+├── state.py             # State定义
+├── reflection.py        # 反思节点（包含 reflection_node 和 REFLECTION_NODE_PROMPT）
+├── data_fetch.py        # 数据获取节点（包含 data_fetch_node 和 DATA_FETCH_AGENT_PROMPT）
+├── signal_generate.py   # 信号生成节点（包含 signal_generate_node 和 SIGNAL_GENERATE_AGENT_PROMPT）
+├── clarify.py           # 澄清节点（包含 clarify_node 和 CLARIFY_NODE_PROMPT）
+├── validation.py        # 验证节点（包含 validation_node 和 VALIDATION_NODE_PROMPT）
+├── routes.py            # 路由函数
+└── graph.py             # 子图构建
+```
+
+这种组织方式的优势：
+- **模块化**：每个节点的逻辑和提示词都在一个文件中，易于理解和维护
+- **可测试性**：可以独立测试每个节点
+- **可扩展性**：添加新节点只需创建新文件，不影响现有代码

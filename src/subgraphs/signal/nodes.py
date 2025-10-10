@@ -319,6 +319,8 @@ def validation_node(state: SignalSubgraphState) -> dict:
     
     # 尝试解析JSON响应
     updates = {}
+    has_errors = False  # 标记本次验证是否发现error
+    
     try:
         # 查找JSON代码块
         if "```json" in response_content:
@@ -340,6 +342,7 @@ def validation_node(state: SignalSubgraphState) -> dict:
         has_errors = any(issue.get('severity') == 'error' for issue in issues)
         
         if has_errors:
+            # 本次验证发现error，追加到error_messages
             if 'error_messages' not in state:
                 updates['error_messages'] = []
             else:
@@ -350,13 +353,18 @@ def validation_node(state: SignalSubgraphState) -> dict:
         
     except (json.JSONDecodeError, ValueError):
         # 解析失败，假设验证通过
-        pass
+        has_errors = False
+    
+    # 验证通过时清空错误信息和重置重试计数
+    if not has_errors:
+        updates['error_messages'] = []
+        updates['retry_count'] = 0
     
     # 追加执行历史
     if 'execution_history' not in state:
         updates['execution_history'] = []
     else:
         updates['execution_history'] = state['execution_history'].copy()
-    updates['execution_history'].append(f"验证完成: {validation_type}")
+    updates['execution_history'].append(f"验证完成: {validation_type}, 有错误={has_errors}")
     
     return updates

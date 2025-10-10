@@ -1,3 +1,4 @@
+# %%
 """
 信号生成子图测试示例
 """
@@ -8,14 +9,14 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.subgraphs.signal import create_signal_subgraph, SignalSubgraphState
+from src.subgraphs.signal import create_signal_subgraph, run_signal_subgraph_stream, SignalSubgraphState
 from src.state import GLOBAL_DATA_STATE
 
 
 def test_data_fetch():
-    """测试数据获取功能"""
+    """测试数据获取功能（使用流式输出）"""
     print("=" * 50)
-    print("测试1: 数据获取")
+    print("测试1: 数据获取（流式）")
     print("=" * 50)
     
     # 创建子图
@@ -39,16 +40,13 @@ def test_data_fetch():
         "retry_count": 0,
     }
     
-    # 执行子图
-    result = graph.invoke(initial_state)
+    # 使用流式执行
+    result = run_signal_subgraph_stream(graph, initial_state, verbose=True)
     
-    # 打印结果
-    print("\n执行历史:")
-    for i, history in enumerate(result.get('execution_history', []), 1):
-        print(f"  {i}. {history}")
-    
-    print(f"\n数据就绪: {result.get('data_ready')}")
-    print(f"指标就绪: {result.get('indicators_ready')}")
+    # 检查最终结果
+    print(f"\n最终状态:")
+    print(f"  数据就绪: {result.get('data_ready')}")
+    print(f"  指标就绪: {result.get('indicators_ready')}")
     
     # 检查GLOBAL_DATA_STATE
     snapshot = GLOBAL_DATA_STATE.snapshot()
@@ -62,9 +60,9 @@ def test_data_fetch():
 
 
 def test_signal_generation():
-    """测试信号生成功能"""
+    """测试信号生成功能（使用流式输出）"""
     print("\n" + "=" * 50)
-    print("测试2: 信号生成")
+    print("测试2: 信号生成（流式）")
     print("=" * 50)
     
     # 先清空之前的数据
@@ -91,16 +89,13 @@ def test_signal_generation():
         "retry_count": 0,
     }
     
-    # 执行子图
-    result = graph.invoke(initial_state)
+    # 使用流式执行
+    result = run_signal_subgraph_stream(graph, initial_state, verbose=True)
     
-    # 打印结果
-    print("\n执行历史:")
-    for i, history in enumerate(result.get('execution_history', []), 1):
-        print(f"  {i}. {history}")
-    
-    print(f"\n数据就绪: {result.get('data_ready')}")
-    print(f"信号就绪: {result.get('signal_ready')}")
+    # 检查最终结果
+    print(f"\n最终状态:")
+    print(f"  数据就绪: {result.get('data_ready')}")
+    print(f"  信号就绪: {result.get('signal_ready')}")
     
     # 检查GLOBAL_DATA_STATE
     snapshot = GLOBAL_DATA_STATE.snapshot()
@@ -163,3 +158,5 @@ if __name__ == "__main__":
         print(f"\n测试失败: {e}")
         import traceback
         traceback.print_exc()
+
+# %%

@@ -8,7 +8,7 @@ from langgraph.prebuilt import create_react_agent
 
 from src.llm import get_llm
 from src.state import GLOBAL_DATA_STATE
-from .state import SignalSubgraphState
+from ..state import SignalSubgraphState
 
 
 REFLECTION_NODE_PROMPT = """你是一个策略分析专家，负责理解用户意图并制定执行计划。

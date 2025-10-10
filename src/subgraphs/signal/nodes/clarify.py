@@ -4,7 +4,7 @@
 from langgraph.types import interrupt
 
 from src.llm import get_llm
-from .state import SignalSubgraphState
+from ..state import SignalSubgraphState
 
 
 CLARIFY_NODE_PROMPT = """你是一个友好的助手，负责向用户请求必要的信息澄清。

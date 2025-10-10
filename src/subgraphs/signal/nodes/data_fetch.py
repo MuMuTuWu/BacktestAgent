@@ -7,7 +7,7 @@ from src.llm import get_light_llm
 from src.state import GLOBAL_DATA_STATE
 from src.tools.daily_bar import tushare_daily_bar_tool
 from src.tools.daily_ind import tushare_daily_basic_tool
-from .state import SignalSubgraphState
+from ..state import SignalSubgraphState
 
 
 DATA_FETCH_AGENT_PROMPT = """你是一个数据获取专家，负责从Tushare获取股票数据并存入全局状态。

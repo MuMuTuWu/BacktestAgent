@@ -8,7 +8,7 @@ from langgraph.prebuilt import create_react_agent
 
 from src.llm import get_llm
 from src.state import GLOBAL_DATA_STATE
-from .state import SignalSubgraphState
+from ..state import SignalSubgraphState
 
 
 SIGNAL_GENERATE_AGENT_PROMPT = """你是一个量化交易策略专家，负责根据用户策略描述生成交易信号。

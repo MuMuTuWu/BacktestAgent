@@ -9,7 +9,7 @@ from langgraph.prebuilt import create_react_agent
 
 from src.llm import get_light_llm
 from src.state import GLOBAL_DATA_STATE
-from .state import SignalSubgraphState
+from ..state import SignalSubgraphState
 
 
 VALIDATION_NODE_PROMPT = """你是一个数据质量检查专家，负责验证数据和信号的完整性与正确性。

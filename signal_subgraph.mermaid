@@ -1,0 +1,31 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	reflection(reflection)
+	data_fetch(data_fetch)
+	signal_generate(signal_generate)
+	clarify(clarify)
+	validate(validate)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> reflection;
+	clarify --> reflection;
+	data_fetch -.-> clarify;
+	data_fetch -.-> reflection;
+	data_fetch -.-> validate;
+	reflection -.-> __end__;
+	reflection -.-> clarify;
+	reflection -.-> data_fetch;
+	reflection -.-> signal_generate;
+	reflection -.-> validate;
+	signal_generate -.-> reflection;
+	signal_generate -.-> validate;
+	validate -.-> __end__;
+	validate -.-> clarify;
+	validate -.-> reflection;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

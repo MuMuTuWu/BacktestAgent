@@ -1,13 +1,14 @@
 """
 反思节点：检查回测状态并制定执行计划
 """
-import json
 import pandas as pd
+from langchain_core.runnables import RunnableConfig
 from langchain_experimental.tools.python.tool import PythonAstREPLTool
 from langgraph.prebuilt import create_react_agent
 
 from src.llm import get_llm
 from src.state import GLOBAL_DATA_STATE
+from src.utils import extract_json_from_response
 from ..state import BacktestSubgraphState
 
 
@@ -77,7 +78,6 @@ REFLECTION_NODE_PROMPT = """你是一个回测分析专家，负责检查回测�
     "fees": 0.001,
     "slippage": 0.0
   }},
-  "reasoning": "你的推理过程",
   "need_rerun": true/false
 }}
 ```
@@ -90,7 +90,10 @@ REFLECTION_NODE_PROMPT = """你是一个回测分析专家，负责检查回测�
 """
 
 
-def reflection_node(state: BacktestSubgraphState) -> dict:
+def reflection_node(
+    state: BacktestSubgraphState,
+    config: RunnableConfig | None = None,
+) -> dict:
     """反思节点：检查回测状态并制定执行计划"""
     
     # 创建数据验证工具
@@ -133,45 +136,63 @@ def reflection_node(state: BacktestSubgraphState) -> dict:
     response_content = final_message.content if hasattr(final_message, 'content') else str(final_message)
     
     # 尝试解析JSON响应
-    try:
-        # 查找JSON代码块
-        if "```json" in response_content:
-            json_start = response_content.find("```json") + 7
-            json_end = response_content.find("```", json_start)
-            json_str = response_content[json_start:json_end].strip()
-        elif "{" in response_content and "}" in response_content:
-            json_start = response_content.find("{")
-            json_end = response_content.rfind("}") + 1
-            json_str = response_content[json_start:json_end]
-        else:
-            raise ValueError("未找到JSON格式的响应")
+    parse_result = extract_json_from_response(response_content)
+    messages = [{"role": "user", "content": prompt}]
+    
+    if not parse_result["success"]:
+        # JSON解析失败，生成新prompt让LLM重试
+        error_info = parse_result["error"]
         
-        decision = json.loads(json_str)
+        # 创建重试prompt
+        retry_prompt = f"""前一次JSON解析失败，请重新生成。
+
+错误类型：{error_info['type']}
+错误信息：{error_info['message']}
+
+你的原始响应是（部分）：
+{error_info['raw_response']}
+
+请重新分析回测状态，并以JSON格式输出你的决策。必须包含以下字段：
+- "analysis": 你对当前情况的分析（1-2句话）
+- "next_action": backtest/pnl_plot/end
+- "backtest_params": 回测参数（如有）
+- "need_rerun": 是否需要重跑"""
+        
+        # 重新调用agent
+        retry_result = agent.invoke({"messages": messages + [
+            {"role": "assistant", "content": response_content},
+            {"role": "user", "content": retry_prompt}
+        ]})
+        
+        # 提取重试后的响应
+        retry_message = retry_result['messages'][-1]
+        retry_response_content = retry_message.content if hasattr(retry_message, 'content') else str(retry_message)
+        
+        # 重新解析
+        parse_result = extract_json_from_response(retry_response_content)
+    
+    if parse_result["success"]:
+        decision = parse_result["data"]
         
         # 更新state
         updates = {
             'current_task': decision.get('next_action', 'end'),
             'backtest_params': decision.get('backtest_params', {}),
+            # 追加执行历史（返回新项，由add reducer自动追加）
+            'execution_history': [f"反思: {decision.get('analysis', '完成分析')}"]
         }
         
         # 如果需要重跑，增加retry_count
         if decision.get('need_rerun', False):
             updates['retry_count'] = state.get('retry_count', 0) + 1
         
-        # 追加执行历史
-        if 'execution_history' not in state:
-            updates['execution_history'] = []
-        else:
-            updates['execution_history'] = state['execution_history'].copy()
-        updates['execution_history'].append(f"反思: {decision.get('analysis', '完成分析')}")
-        
         return updates
-        
-    except (json.JSONDecodeError, ValueError) as e:
-        # 解析失败，返回错误
-        error_msg = f"反思节点JSON解析失败: {str(e)}"
+    else:
+        # 重试后仍然失败
+        error_info = parse_result["error"]
+        error_msg = f"反思节点JSON解析失败（重试后）: [{error_info['type']}] {error_info['message']}"
         
         return {
-            'error_messages': state.get('error_messages', []).copy() + [error_msg],
+            'error_messages': [error_msg],  # 返回新项，由add reducer自动追加
             'current_task': 'end'
         }

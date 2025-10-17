@@ -17,13 +17,13 @@
 ### 1. 导入子图
 
 ```python
-from src.subgraphs.signal import create_signal_subgraph, SignalSubgraphState
+from src.subgraphs.signal import build_signal_graph, SignalSubgraphState
 ```
 
 ### 2. 创建子图实例
 
 ```python
-graph = create_signal_subgraph()
+graph = build_signal_graph().compile()
 ```
 
 ### 3. 初始化State
@@ -33,13 +33,11 @@ initial_state: SignalSubgraphState = {
     "messages": [
         {"role": "user", "content": "请获取000001.SZ从20240901到20240930的数据"}
     ],
-    "current_task": "",
+    "next_action": "",
     "data_ready": False,
     "indicators_ready": False,
     "signal_ready": False,
-    "user_intent": {},
-    "clarification_needed": None,
-    "clarification_count": 0,
+    "next_action_desc": {},
     "execution_history": [],
     "error_messages": [],
     "max_retries": 3,
@@ -67,22 +65,20 @@ print(f"信号就绪: {result['signal_ready']}")
 ### 示例1: 数据获取
 
 ```python
-from src.subgraphs.signal import create_signal_subgraph, SignalSubgraphState
+from src.subgraphs.signal import build_signal_graph, SignalSubgraphState
 from src.state import GLOBAL_DATA_STATE
 
-graph = create_signal_subgraph()
+graph = build_signal_graph().compile()
 
 initial_state: SignalSubgraphState = {
     "messages": [
         {"role": "user", "content": "请获取股票000001.SZ从20240901到20240930的数据"}
     ],
-    "current_task": "",
+    "next_action": "",
     "data_ready": False,
     "indicators_ready": False,
     "signal_ready": False,
-    "user_intent": {},
-    "clarification_needed": None,
-    "clarification_count": 0,
+    "next_action_desc": {},
     "execution_history": [],
     "error_messages": [],
     "max_retries": 3,
@@ -100,22 +96,20 @@ print(f"指标字段: {list(snapshot['indicators'].keys())}")
 ### 示例2: 信号生成
 
 ```python
-from src.subgraphs.signal import create_signal_subgraph, SignalSubgraphState
+from src.subgraphs.signal import build_signal_graph, SignalSubgraphState
 from src.state import GLOBAL_DATA_STATE
 
-graph = create_signal_subgraph()
+graph = build_signal_graph().compile()
 
 initial_state: SignalSubgraphState = {
     "messages": [
         {"role": "user", "content": "请获取000001.SZ从20240901到20240930的数据，然后生成5日和20日均线交叉策略信号"}
     ],
-    "current_task": "",
+    "next_action": "",
     "data_ready": False,
     "indicators_ready": False,
     "signal_ready": False,
-    "user_intent": {},
-    "clarification_needed": None,
-    "clarification_count": 0,
+    "next_action_desc": {},
     "execution_history": [],
     "error_messages": [],
     "max_retries": 3,
@@ -169,13 +163,11 @@ START → Reflection → Data Fetch / Signal Generate / Clarify / Validate → E
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `messages` | `list` | 消息流 |
-| `current_task` | `str` | 当前任务类型 |
+| `next_action` | `str` | 下一步行动 |
 | `data_ready` | `bool` | OHLCV数据是否就绪 |
 | `indicators_ready` | `bool` | 指标数据是否就绪 |
 | `signal_ready` | `bool` | 交易信号是否就绪 |
-| `user_intent` | `dict` | 用户意图和参数 |
-| `clarification_needed` | `str \| None` | 需要澄清的问题 |
-| `clarification_count` | `int` | 澄清次数 |
+| `next_action_desc` | `dict` | 下一步行动的描述和参数 |
 | `execution_history` | `list[str]` | 执行历史 |
 | `error_messages` | `list[str]` | 错误信息 |
 | `max_retries` | `int` | 最大重试次数 |

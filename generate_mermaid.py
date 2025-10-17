@@ -11,9 +11,9 @@ sys.path.insert(0, str(project_root))
 import dotenv
 dotenv.load_dotenv()
 
-from src.subgraphs.signal import create_signal_subgraph
-from src.subgraphs.backtest import create_backtest_subgraph
-from main_with_subgraphs import create_main_graph
+from src.subgraphs.signal import build_signal_graph
+from src.subgraphs.backtest import build_backtest_graph
+from src.graph import create_main_graph
 
 
 def generate_mermaid_files():
@@ -24,7 +24,7 @@ def generate_mermaid_files():
     # 1. 生成signal子图的mermaid
     print("1. 生成signal子图...")
     try:
-        signal_graph = create_signal_subgraph()
+        signal_graph = build_signal_graph().compile()
         signal_mermaid = signal_graph.get_graph().draw_mermaid()
         
         signal_file = project_root / "signal_subgraph.mermaid"
@@ -36,7 +36,7 @@ def generate_mermaid_files():
     # 2. 生成backtest子图的mermaid
     print("\n2. 生成backtest子图...")
     try:
-        backtest_graph = create_backtest_subgraph()
+        backtest_graph = build_backtest_graph().compile()
         backtest_mermaid = backtest_graph.get_graph().draw_mermaid()
         
         backtest_file = project_root / "backtest_subgraph.mermaid"

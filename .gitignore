@@ -1,3 +1,7 @@
+workspace/
+notebook/
+gemini-fullstack-langgraph-quickstart/
+
 # Python-generated files
 __pycache__/
 *.py[oc]

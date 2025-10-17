@@ -1,7 +1,7 @@
 """
 信号生成子图模块
 """
-from .graph import create_signal_subgraph, run_signal_subgraph_stream
+from .graph import build_signal_graph
 from .state import SignalSubgraphState
 
-__all__ = ["create_signal_subgraph", "run_signal_subgraph_stream", "SignalSubgraphState"]
+__all__ = ["build_signal_graph", "SignalSubgraphState"]

@@ -35,8 +35,8 @@ BacktestAgent/
 ├── docs/                    # 文档
 ├── notebook/               # Jupyter Notebook 示例
 ├── output/                 # 输出目录（按日期组织）
-├── main_with_subgraphs.py # 主图（串联signal和backtest）
-├── config.py              # 配置文件
+├── main.py               # 主图执行入口
+├── src/config.py          # 配置文件（已从根目录迁移）
 └── pyproject.toml         # 项目依赖
 
 ```
@@ -83,15 +83,15 @@ TUSHARE_TOKEN=your_tushare_token
 #### 1. 运行完整流程（信号生成 + 回测）
 
 ```bash
-uv run main_with_subgraphs.py
+uv run main.py
 ```
 
 #### 2. 仅运行信号生成子图
 
 ```python
-from src.subgraphs.signal import create_signal_subgraph, SignalSubgraphState
+from src.subgraphs.signal import build_signal_graph, SignalSubgraphState
 
-graph = create_signal_subgraph()
+graph = build_signal_graph().compile()
 
 initial_state: SignalSubgraphState = {
     "messages": [
@@ -116,10 +116,10 @@ result = graph.invoke(initial_state)
 #### 3. 仅运行回测子图
 
 ```python
-from src.subgraphs.backtest import create_backtest_subgraph, BacktestSubgraphState
+from src.subgraphs.backtest import build_backtest_graph, BacktestSubgraphState
 
 # 假设signal已存在于GLOBAL_DATA_STATE中
-graph = create_backtest_subgraph()
+graph = build_backtest_graph().compile()
 
 initial_state: BacktestSubgraphState = {
     "messages": [
@@ -227,22 +227,3 @@ uv run generate_mermaid.py
 3. **虚拟环境**：运行命令前需先激活项目虚拟环境：`source .venv/bin/activate`
 4. **数据缓存**：数据文件存储在 `data/` 目录，避免重复下载
 5. **日志记录**：所有执行过程都会记录到 `output/` 目录
-
-## 🤝 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-## 📄 许可证
-
-本项目采用 MIT 许可证。
-
-## 👥 作者
-
-- **MuMuTuWu** - [GitHub](https://github.com/MuMuTuWu)
-
-## 🔗 相关链接
-
-- [LangGraph 官方文档](https://langchain-ai.github.io/langgraph/)
-- [vectorbt 文档](https://vectorbt.dev/)
-- [quantstats 文档](https://github.com/ranaroussi/quantstats)
-- [Tushare Pro 文档](https://tushare.pro/document/2)

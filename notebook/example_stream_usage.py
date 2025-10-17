@@ -1,7 +1,7 @@
 """
-信号生成子图流式调用示例
+信号生成子图调用示例。
 
-展示如何使用 run_signal_subgraph_stream 函数实时查看子图执行过程
+展示如何直接调用编译后的子图，并查看执行输出。
 """
 import sys
 from pathlib import Path
@@ -10,7 +10,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.subgraphs.signal import create_signal_subgraph, run_signal_subgraph_stream, SignalSubgraphState
+from src.subgraphs.signal import build_signal_graph, SignalSubgraphState
 from src.state import GLOBAL_DATA_STATE
 
 
@@ -21,7 +21,7 @@ def example_stream_execution():
     GLOBAL_DATA_STATE.override(ohlcv={}, indicators={}, signal={})
     
     # 创建并编译子图
-    graph = create_signal_subgraph()
+    graph = build_signal_graph().compile()
     
     # 初始化状态
     initial_state: SignalSubgraphState = {
@@ -46,12 +46,7 @@ def example_stream_execution():
     print("="*70)
     print("\n用户请求:", initial_state["messages"][0]["content"])
     
-    # 使用流式执行
-    final_state = run_signal_subgraph_stream(
-        compiled_graph=graph,
-        initial_state=initial_state,
-        verbose=True  # 打印详细信息
-    )
+    final_state = graph.invoke(initial_state)
     
     # 检查最终结果
     print("\n" + "="*70)
@@ -94,7 +89,7 @@ def example_silent_execution():
     GLOBAL_DATA_STATE.override(ohlcv={}, indicators={}, signal={})
     
     # 创建并编译子图
-    graph = create_signal_subgraph()
+    graph = build_signal_graph().compile()
     
     # 初始化状态
     initial_state: SignalSubgraphState = {
@@ -118,12 +113,7 @@ def example_silent_execution():
     print("示例: 静默模式执行（verbose=False）")
     print("="*70)
     
-    # 静默执行
-    final_state = run_signal_subgraph_stream(
-        compiled_graph=graph,
-        initial_state=initial_state,
-        verbose=False  # 不打印详细信息
-    )
+    final_state = graph.invoke(initial_state)
     
     print(f"\n执行完成！数据就绪: {final_state.get('data_ready')}")
 

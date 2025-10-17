@@ -9,7 +9,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.subgraphs.signal import create_signal_subgraph, run_signal_subgraph_stream, SignalSubgraphState
+from src.subgraphs.signal import build_signal_graph, SignalSubgraphState
 from src.state import GLOBAL_DATA_STATE
 
 
@@ -20,7 +20,7 @@ def test_data_fetch():
     print("=" * 50)
     
     # 创建子图
-    graph = create_signal_subgraph()
+    graph = build_signal_graph().compile()
     
     # 初始化state
     initial_state: SignalSubgraphState = {
@@ -41,7 +41,7 @@ def test_data_fetch():
     }
     
     # 使用流式执行
-    result = run_signal_subgraph_stream(graph, initial_state, verbose=True)
+    result = graph.invoke(initial_state)
     
     # 检查最终结果
     print(f"\n最终状态:")
@@ -69,7 +69,7 @@ def test_signal_generation():
     GLOBAL_DATA_STATE.override(ohlcv={}, indicators={}, signal={})
     
     # 创建子图
-    graph = create_signal_subgraph()
+    graph = build_signal_graph().compile()
     
     # 初始化state（包含数据获取和信号生成）
     initial_state: SignalSubgraphState = {
@@ -90,7 +90,7 @@ def test_signal_generation():
     }
     
     # 使用流式执行
-    result = run_signal_subgraph_stream(graph, initial_state, verbose=True)
+    result = graph.invoke(initial_state)
     
     # 检查最终结果
     print(f"\n最终状态:")
@@ -117,7 +117,7 @@ def test_clarification():
     print("=" * 50)
     
     # 创建子图
-    graph = create_signal_subgraph()
+    graph = build_signal_graph().compile()
     
     # 初始化state（故意提供不完整的信息）
     initial_state: SignalSubgraphState = {

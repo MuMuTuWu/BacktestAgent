@@ -6,7 +6,7 @@ import os
 import dotenv
 from typing import Optional
 from langchain.chat_models import init_chat_model
-from config import config
+from .config import configurable
 
 # 加载环境变量
 dotenv.load_dotenv()
@@ -21,7 +21,7 @@ def get_llm():
     global _main_llm_instance
     if _main_llm_instance is None:
         _main_llm_instance = init_chat_model(
-            model=config["model_name"],
+            model=configurable["model_name"],
             base_url=os.getenv("BASE_URL"),
             reasoning_effort="minimal",
         )
@@ -33,7 +33,7 @@ def get_light_llm():
     global _light_llm_instance
     if _light_llm_instance is None:
         _light_llm_instance = init_chat_model(
-            model=config["light_model_name"],
+            model=configurable["light_model_name"],
             base_url=os.getenv("BASE_URL"),
             reasoning_effort="minimal",
         )

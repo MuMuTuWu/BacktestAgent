@@ -1,7 +1,7 @@
 """
 回测子图模块
 """
-from .graph import create_backtest_subgraph, run_backtest_subgraph_stream
+from .graph import build_backtest_graph
 from .state import BacktestSubgraphState
 
-__all__ = ["create_backtest_subgraph", "run_backtest_subgraph_stream", "BacktestSubgraphState"]
+__all__ = ["build_backtest_graph", "BacktestSubgraphState"]

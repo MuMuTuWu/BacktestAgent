@@ -54,11 +54,11 @@ class BacktestSubgraphState(TypedDict):
 ### 1. 独立使用回测子图
 
 ```python
-from src.subgraphs.backtest import create_backtest_subgraph, BacktestSubgraphState
+from src.subgraphs.backtest import build_backtest_graph, BacktestSubgraphState
 from src.state import GLOBAL_DATA_STATE
 
 # 假设signal已存在于GLOBAL_DATA_STATE中
-graph = create_backtest_subgraph()
+graph = build_backtest_graph().compile()
 
 initial_state: BacktestSubgraphState = {
     "messages": [
@@ -86,19 +86,14 @@ result = graph.invoke(initial_state)
 ### 2. 串联signal和backtest子图
 
 ```python
-from main_with_subgraphs import create_main_graph
+from src.graph import build_initial_state, build_run_config, create_main_graph
 
 main_graph = create_main_graph()
 
-initial_state = {
-    "messages": [
-        {"role": "user", "content": "获取数据，生成信号，并执行回测"}
-    ],
-    "signal_completed": False,
-    "backtest_completed": False,
-}
+initial_state = build_initial_state("获取数据，生成信号，并执行回测")
+final_state = main_graph.invoke(initial_state, config=build_run_config())
 
-final_state = main_graph.invoke(initial_state)
+print(final_state["signal_ready"], final_state["backtest_ready"])
 ```
 
 ## 回测流程
@@ -167,10 +162,10 @@ uv add vectorbt quantstats
 
 参考测试文件：
 - `notebook/test_backtest_subgraph.py`: 回测子图单独测试
-- `main_with_subgraphs.py`: 完整流程测试
+- `main.py`: 完整流程测试
 
 运行测试：
 ```bash
 uv run notebook/test_backtest_subgraph.py
-uv run main_with_subgraphs.py
+uv run main.py
 ```

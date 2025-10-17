@@ -1,18 +1,19 @@
 """
 验证节点：验证数据和信号的质量
 """
-import json
 import pandas as pd
 import numpy as np
+from langchain_core.runnables import RunnableConfig
 from langchain_experimental.tools.python.tool import PythonAstREPLTool
 from langgraph.prebuilt import create_react_agent
 
 from src.llm import get_light_llm
 from src.state import GLOBAL_DATA_STATE
+from src.utils import extract_json_from_response
 from ..state import SignalSubgraphState
 
 
-VALIDATION_NODE_PROMPT = """你是一个数据质量检查专家，负责验证数据和信号的完整性与正确性。
+VALIDATION_SYSTEM_PROMPT = """你是一个数据质量检查专家，负责验证数据和信号的完整性与正确性。
 
 ## 你的职责
 1. 检查数据是否成功加载到GLOBAL_DATA_STATE
@@ -131,10 +132,6 @@ if len(all_indices) > 1:
             print(f"警告：第{{i}}个DataFrame的时间索引不一致")
 ```
 
-## 当前验证目标
-- 验证类型: {validation_type}
-- 期望的数据字段: {expected_fields}
-
 ## 验证结果输出格式
 
 完成验证后，以JSON格式输出结果：
@@ -189,11 +186,17 @@ if len(all_indices) > 1:
 - 不要假设数据格式，实际检查后再下结论
 - 对于警告级别的问题，评估是否真正影响策略执行
 - 缺失值不一定是错误，取决于策略是否需要完整数据
-- 提供具体的数据统计，而不只是"数据正常"
-"""
+- 提供具体的数据统计，而不只是"数据正常\""""
+
+VALIDATION_USER_PROMPT_TEMPLATE = """## 当前验证目标
+- 验证类型: {validation_type}
+- 期望的数据字段: {expected_fields}"""
 
 
-def validation_node(state: SignalSubgraphState) -> dict:
+def validation_node(
+    state: SignalSubgraphState,
+    config: RunnableConfig | None = None,
+) -> dict:
     """验证节点：验证数据和信号的质量"""
     
     snapshot = GLOBAL_DATA_STATE.snapshot()
@@ -213,68 +216,96 @@ def validation_node(state: SignalSubgraphState) -> dict:
     
     # 根据当前任务确定验证类型
     validation_type = 'signal' if state.get('signal_ready') else 'data'
-    expected_fields = state.get('user_intent', {}).get('params', {}).get('required_indicators', [])
+    expected_fields = []  # next_action_desc 现在是字符串，validation_node 不再从中提取 required_indicators
     
-    prompt = VALIDATION_NODE_PROMPT.format(
+    # 填充user message
+    user_message = VALIDATION_USER_PROMPT_TEMPLATE.format(
         validation_type=validation_type,
         expected_fields=expected_fields
     )
     
+    # 创建system + user消息对
+    messages = [
+        {"role": "system", "content": VALIDATION_SYSTEM_PROMPT},
+        {"role": "user", "content": user_message}
+    ]
+    
     # 执行agent
-    result = agent.invoke({"messages": [{"role": "user", "content": prompt}]})
+    result = agent.invoke({"messages": messages})
     
     # 提取最后一条消息
     final_message = result['messages'][-1]
     response_content = final_message.content if hasattr(final_message, 'content') else str(final_message)
     
     # 尝试解析JSON响应
-    updates = {}
+    state_update = {}
     has_errors = False  # 标记本次验证是否发现error
     
-    try:
-        # 查找JSON代码块
-        if "```json" in response_content:
-            json_start = response_content.find("```json") + 7
-            json_end = response_content.find("```", json_start)
-            json_str = response_content[json_start:json_end].strip()
-        elif "{" in response_content and "}" in response_content:
-            json_start = response_content.find("{")
-            json_end = response_content.rfind("}") + 1
-            json_str = response_content[json_start:json_end]
-        else:
-            # 没有JSON，假设验证通过
-            json_str = '{"validation_passed": true, "issues_found": []}'
+    parse_result = extract_json_from_response(response_content)
+    
+    if not parse_result["success"]:
+        # JSON解析失败，生成新prompt让LLM重试
+        error_info = parse_result["error"]
         
-        validation_result = json.loads(json_str)
+        # 创建重试prompt
+        retry_prompt = f"""前一次JSON解析失败，请重新生成。
+
+错误类型：{error_info['type']}
+错误信息：{error_info['message']}
+
+你的原始响应是（部分）：
+{error_info['raw_response']}
+
+请重新执行验证，并以JSON格式输出验证结果。必须包含以下字段：
+- "validation_passed": true/false
+- "checks_performed": [执行的检查列表]
+- "issues_found": [问题列表]
+- "data_summary": 数据摘要
+- "recommendations": [建议列表]"""
+        
+        # 重新调用agent
+        agent = create_react_agent(get_light_llm(), tools=[py_tool])
+        retry_result = agent.invoke({"messages": messages + [
+            {"role": "assistant", "content": response_content},
+            {"role": "user", "content": retry_prompt}
+        ]})
+        
+        # 提取重试后的响应
+        retry_message = retry_result['messages'][-1]
+        retry_response_content = retry_message.content if hasattr(retry_message, 'content') else str(retry_message)
+        
+        # 重新解析
+        parse_result = extract_json_from_response(retry_response_content)
+        
+        # 追加执行历史（返回新项，由add reducer自动追加）
+        state_update = {
+            'execution_history': [f"验证: JSON解析失败后重试 - 错误: {error_info['type']}"]
+        }
+    
+    if parse_result["success"]:
+        validation_result = parse_result["data"]
         
         # 检查是否有error级别的问题
         issues = validation_result.get('issues_found', [])
         has_errors = any(issue.get('severity') == 'error' for issue in issues)
         
         if has_errors:
-            # 本次验证发现error，追加到error_messages
-            if 'error_messages' not in state:
-                updates['error_messages'] = []
-            else:
-                updates['error_messages'] = state['error_messages'].copy()
-            
+            # 本次验证发现error，追加到error_messages（返回新项，由add reducer自动追加）
             error_msgs = [issue.get('message', 'Unknown error') for issue in issues if issue.get('severity') == 'error']
-            updates['error_messages'].extend(error_msgs)
-        
-    except (json.JSONDecodeError, ValueError):
-        # 解析失败，假设验证通过
-        has_errors = False
+            state_update['error_messages'] = error_msgs
+    else:
+        # 重试后仍然失败，将错误信息作为验证失败
+        error_info = parse_result["error"]
+        has_errors = True
+        error_msg = f"验证节点JSON解析失败（重试后）: [{error_info['type']}] {error_info['message']}"
+        state_update['error_messages'] = [error_msg]
     
     # 验证通过时清空错误信息和重置重试计数
     if not has_errors:
-        updates['error_messages'] = []
-        updates['retry_count'] = 0
+        state_update['error_messages'] = []
+        state_update['retry_count'] = 0
     
-    # 追加执行历史
-    if 'execution_history' not in state:
-        updates['execution_history'] = []
-    else:
-        updates['execution_history'] = state['execution_history'].copy()
-    updates['execution_history'].append(f"验证完成: {validation_type}, 有错误={has_errors}")
+    # 追加执行历史（返回新项，由add reducer自动追加）
+    state_update['execution_history'] = [f"验证完成: {validation_type}, 有错误={has_errors}"]
     
-    return updates
+    return state_update

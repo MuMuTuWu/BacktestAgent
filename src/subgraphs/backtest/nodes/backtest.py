@@ -3,6 +3,7 @@
 """
 import pandas as pd
 import numpy as np
+from langchain_core.runnables import RunnableConfig
 from langchain_experimental.tools.python.tool import PythonAstREPLTool
 from langgraph.prebuilt import create_react_agent
 
@@ -128,7 +129,10 @@ print("回测完成，日度收益已存储")
 """
 
 
-def backtest_node(state: BacktestSubgraphState) -> dict:
+def backtest_node(
+    state: BacktestSubgraphState,
+    config: RunnableConfig | None = None,
+) -> dict:
     """回测节点：使用vectorbt执行回测并计算日度收益"""
     
     # 获取当前可用数据
@@ -175,24 +179,15 @@ def backtest_node(state: BacktestSubgraphState) -> dict:
         'returns_ready': 'daily_returns' in snapshot.get('backtest_results', {}),
     }
     
-    # 追加执行历史
-    if 'execution_history' not in state:
-        updates['execution_history'] = []
-    else:
-        updates['execution_history'] = state['execution_history'].copy()
-    
+    # 构建执行历史（返回新项，由add reducer自动追加）
     if updates['backtest_completed']:
         returns = snapshot['backtest_results']['daily_returns']
-        updates['execution_history'].append(
+        updates['execution_history'] = [
             f"回测完成: 收益形状={returns.shape}, 有效点数={returns.notna().sum().sum()}"
-        )
+        ]
     else:
-        updates['execution_history'].append("回测执行但未生成daily_returns")
-        # 记录错误
-        if 'error_messages' not in state:
-            updates['error_messages'] = []
-        else:
-            updates['error_messages'] = state['error_messages'].copy()
-        updates['error_messages'].append("回测失败：未生成daily_returns字段")
+        updates['execution_history'] = ["回测执行但未生成daily_returns"]
+        # 记录错误（返回新项，由add reducer自动追加）
+        updates['error_messages'] = ["回测失败：未生成daily_returns字段"]
     
     return updates

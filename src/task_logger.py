@@ -12,6 +12,7 @@ from langchain.callbacks.base import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 from langchain_core.agents import AgentAction, AgentFinish
 
+from .config import configurable
 
 class TaskLoggerCallbackHandler(BaseCallbackHandler):
     """任务执行日志记录器
@@ -19,13 +20,13 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
     记录LangGraph执行过程中的所有LLM和工具调用信息到日志文件
     """
     
-    def __init__(self, task_dir: Path):
+    def __init__(self, trim_log: bool = True):
         """初始化日志记录器
         
         Args:
-            task_dir: 任务目录，日志文件将存储在此目录下
+            trim_log: 是否限制日志长度。如果为False，则不限制长度；如果为True，则限制为400字符
         """
-        self.task_dir = Path(task_dir)
+        self.task_dir = configurable["task_dir"]
         self.task_dir.mkdir(parents=True, exist_ok=True)
         
         # 日志文件路径
@@ -36,6 +37,9 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
         self.current_node: Optional[str] = None
         # 当前工具名称（用于上下文追踪）
         self.current_tool: Optional[str] = None
+        
+        # 是否限制日志长度
+        self.trim_log = trim_log
         
         # 初始化日志文件
         self._init_log_files()
@@ -121,8 +125,8 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
             # 记录提示词
             for i, prompt in enumerate(prompts):
                 self._write_text(f"  提示词 [{i+1}]:")
-                # 限制长度，避免日志过大
-                if len(prompt) > 400:
+                # 根据trim_log参数决定是否限制长度
+                if self.trim_log and len(prompt) > 400:
                     prompt_preview = prompt[:200] + "\n...\n" + prompt[-200:]
                 else:
                     prompt_preview = prompt
@@ -168,25 +172,20 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
                     
                     self._write_text(f"    工具名: {tool_name}")
                     args_str = json.dumps(tool_args, ensure_ascii=False, indent=2) if isinstance(tool_args, (dict, list)) else str(tool_args)
-                    if len(args_str) > 400:
+                    if self.trim_log and len(args_str) > 400:
                         args_preview = args_str[:200] + "\n...\n" + args_str[-200:]
                     else:
                         args_preview = args_str
                     self._write_text(f"    参数: {args_preview}")
             else:
                 # 记录普通文本输出
-                if len(output_text) > 400:
+                if self.trim_log and len(output_text) > 400:
                     output_preview = output_text[:200] + "\n...\n" + output_text[-200:]
                 else:
                     output_preview = output_text
                 self._write_text(f"  输出:")
                 for line in output_preview.split('\n'):
                     self._write_text(f"    {line}")
-            
-            # 记录token使用情况
-            # if response.llm_output and 'token_usage' in response.llm_output:
-            #     token_usage = response.llm_output['token_usage']
-            #     self._write_text(f"  Token使用: {token_usage}")
             
             self._write_jsonl("llm_end", {
                 "output": output_text,
@@ -212,8 +211,26 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
         try:
             tool_name = serialized.get('name', 'unknown') if serialized else 'unknown'
             self.current_tool = tool_name
-            self._write_text(f"\n[工具] 开始调用: {tool_name}")
-            self._write_text(f"  输入: {input_str}")
+            self._write_text(f"\n[工具] 开始调用: ")
+            
+            # 特殊处理 python_repl 工具的输入
+            if tool_name == 'python_repl':
+                # 尝试从字典中提取 query 字段
+                try:
+                    import ast
+                    input_dict = ast.literal_eval(input_str) if isinstance(input_str, str) and input_str.startswith('{') else {'query': input_str}
+                    code = input_dict.get('query', input_str)
+                except:
+                    code = input_str
+                
+                # 输出格式化的代码
+                self._write_text(f"  代码:")
+                self._write_text(f"  {'─' * 60}")
+                for line in code.split('\n'):
+                    self._write_text(f"  {line}")
+                self._write_text(f"  {'─' * 60}")
+            else:
+                self._write_text(f"  输入: {input_str}")
             
             self._write_jsonl("tool_start", {
                 "tool_name": tool_name,
@@ -228,17 +245,16 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
             # 转换输出为字符串（可能是ToolMessage对象）
             output_str = str(output.content) if not isinstance(output, str) else output
             
-            # 限制输出长度
-            if len(output_str) > 400:
+            # 根据trim_log参数决定是否限制输出长度
+            if self.trim_log and len(output_str) > 400:
                 content_preview = output_str[:200] + "\n...\n" + output_str[-200:]
             else:
                 content_preview = output_str
             
-            # 输出工具名称和内容
-            tool_name = self.current_tool if self.current_tool else 'unknown'
-            self._write_text(f"[工具] 调用结束")
-            self._write_text(f"  name: {tool_name}")
-            self._write_text(f"  content: {content_preview}")
+            # 从kwargs获取工具名称
+            tool_name = kwargs.get('name', 'unknown')
+            self._write_text(f"[工具] 调用结束: {tool_name}")
+            self._write_text(f"{content_preview}")
             
             self._write_jsonl("tool_end", {
                 "tool_name": tool_name,
@@ -273,6 +289,7 @@ class TaskLoggerCallbackHandler(BaseCallbackHandler):
 
     def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> None:
         """Chain执行结束时的回调"""
+        # 记录节点输出
         pass
 
     def on_chain_error(self, error: Exception, **kwargs: Any) -> None:

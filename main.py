@@ -1,225 +1,68 @@
-# %%
-# Create a StateGraph
-from typing import Annotated, Any, Sequence
+"""
+项目入口：演示完整 LangGraph 流程（信号生成 → 回测 → PNL 绘制）。
 
-from typing_extensions import TypedDict
+支持 human-in-the-loop：
+- 如果执行过程中需要用户澄清（如 clarify_node），图会暂停
+- 使用 Command(resume={"data": response}) 恢复执行
+"""
+from __future__ import annotations
 
-from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
-from langgraph.types import StreamMode
-from langchain_core.runnables.config import RunnableConfig
-
-
-class State(TypedDict):
-    # Messages have the type "list". The `add_messages` function
-    # in the annotation defines how this state key should be updated
-    # (in this case, it appends messages to the list, rather than overwriting them)
-    messages: Annotated[list, add_messages]
-
-
-graph_builder = StateGraph(State)
-
-# %%
-# Add a node
 import dotenv
+from langgraph.types import Command
+
+from src.config import configurable
+from src.graph import (
+    build_initial_state,
+    build_run_config,
+    create_main_graph,
+)
+from src.state import GLOBAL_DATA_STATE
+
 dotenv.load_dotenv()
 
-import os
-from src.llm import get_llm
 
-def chatbot(state: State):
-    llm = get_llm()
-    return {"messages": [llm.invoke(state["messages"])]}
+def main(query: str, thread_id: str = "main-session") -> None:
+    """
+    执行完整流程
+    
+    Args:
+        query: 用户查询
+        thread_id: 会话ID，用于状态持久化
+    """
+    print("\n" + "=" * 80)
+    print("🎯 开始执行完整流程：信号生成 → 回测 → PNL绘制")
+    print("=" * 80 + "\n")
+    print(f"日志目录: {configurable['task_dir']}")
+    print(f"会话ID: {thread_id}\n")
 
+    # 创建带 checkpointer 的主图
+    graph = create_main_graph()  # 默认使用 MemorySaver
+    initial_state = build_initial_state(query)
+    run_config = build_run_config(thread_id=thread_id)
 
-# The first argument is the unique node name
-# The second argument is the function or object that will be called whenever
-# the node is used.
-graph_builder.add_node("chatbot", chatbot)
+    # 执行完整流程
+    final_state = graph.invoke(initial_state, config=run_config)
+    # 执行完成
+    _print_final_results(final_state)
 
-# %%
-# Add an entry point
-graph_builder.add_edge(START, "chatbot")
-# Add an exit point
-graph_builder.add_edge("chatbot", END)
-# Compile the graph
-graph = graph_builder.compile()
+def _print_final_results(final_state: dict) -> None:
+    """打印最终结果"""
+    print("\n" + "=" * 80)
+    print("✅ 完整流程执行完成")
+    print("=" * 80 + "\n")
 
+    print(f"信号生成: {'✅ 成功' if final_state.get('signal_ready') else '❌ 失败'}")
+    print(f"回测完成: {'✅ 成功' if final_state.get('backtest_ready') else '❌ 失败'}")
+    if final_state.get("errors"):
+        print(f"异常信息: {len(final_state['errors'])} 条，详情见日志目录。")
 
-
-
-# %%
-# # Run the chatbot
-# def _as_message_list(candidate: Any) -> list[Any] | None:
-#     if isinstance(candidate, list):
-#         return candidate
-#     return None
-
-
-# def _message_content(message: Any) -> str | None:
-#     content = getattr(message, "content", None)
-#     if content:
-#         return content
-#     if isinstance(message, dict):
-#         raw = message.get("content")
-#         if isinstance(raw, str):
-#             return raw
-#     return None
-
-
-# def _message_role(message: Any) -> str | None:
-#     role = getattr(message, "type", None)
-#     if isinstance(role, str):
-#         return role
-#     if isinstance(message, dict):
-#         role = message.get("role")
-#         if isinstance(role, str):
-#             return role
-#     return None
+    snapshot = GLOBAL_DATA_STATE.snapshot()
+    print("\nGLOBAL_DATA_STATE:")
+    print(f"  - OHLCV字段: {list(snapshot.get('ohlcv', {}).keys())}")
+    print(f"  - 信号字段: {list(snapshot.get('signal', {}).keys())}")
+    print(f"  - 回测结果字段: {list(snapshot.get('backtest_results', {}).keys())}")
 
 
-# def _display_message(message: Any, prefix: str) -> bool:
-#     pretty_printer = getattr(message, "pretty_print", None)
-#     if callable(pretty_printer):
-#         if prefix not in ("", "Assistant"):
-#             print(f"{prefix}:")
-#         pretty_printer()
-#         return True
-
-#     content = _message_content(message)
-#     if content:
-#         print(f"{prefix}: {content}")
-#         return True
-#     return False
-
-
-# def _print_assistant_messages(messages: list[Any], prefix: str = "Assistant") -> bool:
-#     printed = False
-#     for msg in messages:
-#         if _message_role(msg) in ("assistant", "ai"):
-#             if _display_message(msg, prefix):
-#                 printed = True
-#     return printed
-
-
-# def _print_last_assistant(messages: list[Any]) -> bool:
-#     for msg in reversed(messages):
-#         if _message_role(msg) in ("assistant", "ai"):
-#             if _display_message(msg, "Assistant"):
-#                 return True
-#     return False
-
-
-# def _handle_updates(payload: dict[str, Any]) -> None:
-#     for node_name, update in payload.items():
-#         if node_name == "__interrupt__":
-#             print(f"[updates] interrupt: {update}")
-#             continue
-#         if isinstance(update, dict):
-#             messages = _as_message_list(update.get("messages"))
-#             if messages:
-#                 _print_assistant_messages(messages, prefix=f"Assistant[{node_name}]")
-#             for key, value in update.items():
-#                 if key == "messages":
-#                     continue
-#                 print(f"[updates] {node_name}.{key}: {value}")
-#         else:
-#             print(f"[updates] {node_name}: {update}")
-
-
-# def _handle_values(payload: dict[str, Any]) -> None:
-#     messages = _as_message_list(payload.get("messages")) if isinstance(payload, dict) else None
-#     if messages and _print_last_assistant(messages):
-#         return
-#     print(f"[values] {payload}")
-
-
-# def _handle_messages(payload: Any) -> None:
-#     if isinstance(payload, tuple) and len(payload) == 2:
-#         token, metadata = payload
-#         print(f"[messages] token={token!s} metadata={metadata}")
-#     else:
-#         print(f"[messages] {payload}")
-
-
-# def _handle_tasks(payload: Any) -> None:
-#     if isinstance(payload, dict):
-#         name = payload.get("name", "<unknown>")
-#         if "result" in payload or "error" in payload:
-#             status = "failed" if payload.get("error") else "finished"
-#             print(f"[tasks] {name} {status}: {payload}")
-#         else:
-#             print(f"[tasks] {name} started: {payload}")
-#     else:
-#         print(f"[tasks] {payload}")
-
-
-# def _handle_checkpoint(payload: Any) -> None:
-#     print(f"[checkpoints] {payload}")
-
-
-# def _dispatch_event(mode: StreamMode, payload: Any) -> None:
-#     if mode == "updates" and isinstance(payload, dict):
-#         _handle_updates(payload)
-#     elif mode == "values" and isinstance(payload, dict):
-#         _handle_values(payload)
-#     elif mode == "messages":
-#         _handle_messages(payload)
-#     elif mode == "custom":
-#         print(f"[custom] {payload}")
-#     elif mode == "tasks":
-#         _handle_tasks(payload)
-#     elif mode == "checkpoints":
-#         _handle_checkpoint(payload)
-#     else:
-#         print(f"[{mode}] {payload}")
-
-
-# def _normalize_modes(stream_mode: StreamMode | Sequence[StreamMode]) -> list[StreamMode]:
-#     if isinstance(stream_mode, str):
-#         return [stream_mode]
-#     return list(stream_mode)
-
-
-# def stream_graph_updates(
-#     user_input: str,
-#     stream_mode: StreamMode | Sequence[StreamMode] = "updates",
-#     config: RunnableConfig | None = None,
-# ) -> None:
-#     modes = _normalize_modes(stream_mode)
-#     if not modes:
-#         raise ValueError("stream_mode 不能为空")
-
-#     multi_mode = len(modes) > 1
-#     stream_arg: StreamMode | Sequence[StreamMode]
-#     stream_arg = modes if multi_mode else modes[0]
-
-#     for chunk in graph.stream(
-#         {"messages": [{"role": "user", "content": user_input}]},
-#         config,
-#         stream_mode=stream_arg,
-#     ):
-#         if multi_mode:
-#             mode, payload = chunk
-#         else:
-#             mode, payload = modes[0], chunk
-#         _dispatch_event(mode, payload)
-
-# %%
-user_input = "Hi there! My name is Will."
-config: RunnableConfig | None = None
-
-# The config is the second positional argument to stream()
-events = graph.stream(
-    {"messages": [{"role": "user", "content": user_input}]},
-    config,
-    stream_mode="values",
-)
-
-for event in events:
-    messages = event.get("messages") if isinstance(event, dict) else None
-    if isinstance(messages, list) and messages:
-        last_message = messages[-1]
-        print(f"Assistant: {last_message}")
-    else:
-        print(f"[values] {event}")
+if __name__ == "__main__":
+    query = "请获取000001.SZ从20240901到20250901的数据，然后生成5日和20日均线交叉策略信号，并执行回测"
+    main(query)

@@ -9,7 +9,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.subgraphs.backtest import create_backtest_subgraph, run_backtest_subgraph_stream, BacktestSubgraphState
+from src.subgraphs.backtest import build_backtest_graph, BacktestSubgraphState
 from src.state import GLOBAL_DATA_STATE
 import pandas as pd
 import numpy as np
@@ -54,7 +54,7 @@ def test_backtest_with_existing_signal():
     print(f"  - 卖出信号数: {(signal == -1).sum().sum()}")
     
     # 创建回测子图
-    graph = create_backtest_subgraph()
+    graph = build_backtest_graph().compile()
     
     # 初始化state
     initial_state: BacktestSubgraphState = {
@@ -78,7 +78,7 @@ def test_backtest_with_existing_signal():
     }
     
     # 使用流式执行
-    result = run_backtest_subgraph_stream(graph, initial_state, verbose=True)
+    result = graph.invoke(initial_state)
     
     # 检查最终结果
     print(f"\n最终状态:")
@@ -114,7 +114,7 @@ def test_backtest_without_signal():
     )
     
     # 创建回测子图
-    graph = create_backtest_subgraph()
+    graph = build_backtest_graph().compile()
     
     # 初始化state
     initial_state: BacktestSubgraphState = {
@@ -141,7 +141,7 @@ def test_backtest_without_signal():
     print("预期: 回测子图应该直接结束，因为没有信号数据")
     
     # 使用流式执行
-    result = run_backtest_subgraph_stream(graph, initial_state, verbose=True)
+    result = graph.invoke(initial_state)
     
     print(f"\n最终状态:")
     print(f"  回测完成: {result.get('backtest_completed')}")

@@ -3,6 +3,7 @@
 """
 import pandas as pd
 import numpy as np
+from langchain_core.runnables import RunnableConfig
 from langchain_experimental.tools.python.tool import PythonAstREPLTool
 from langgraph.prebuilt import create_react_agent
 
@@ -11,7 +12,7 @@ from src.state import GLOBAL_DATA_STATE
 from ..state import SignalSubgraphState
 
 
-SIGNAL_GENERATE_AGENT_PROMPT = """你是一个量化交易策略专家，负责根据用户策略描述生成交易信号。
+SIGNAL_GENERATE_SYSTEM_PROMPT = """你是一个量化交易策略专家，负责根据用户策略描述生成交易信号。
 
 ## 你的职责
 1. 理解用户的策略逻辑
@@ -49,13 +50,6 @@ indicators = snapshot['indicators']  # dict[str, DataFrame]
 # 生成信号后存储
 # GLOBAL_DATA_STATE.update('signal', {{'my_signal': signal_df}})
 ```
-
-## 当前数据状态
-可用的OHLCV字段：{available_ohlcv}
-可用的指标字段：{available_indicators}
-
-## 用户策略描述
-{strategy_description}
 
 ## 交易信号定义
 - **1**: 买入信号（开多仓或平空仓）
@@ -161,11 +155,20 @@ print("动量信号已生成，形状:", signal.shape)
 ## 错误处理
 - KeyError：数据字段不存在，检查available_ohlcv/available_indicators
 - ValueError：数据形状不匹配，确保时间对齐
-- TypeError：数据类型错误，检查是否正确获取DataFrame
-"""
+- TypeError：数据类型错误，检查是否正确获取DataFrame"""
+
+SIGNAL_GENERATE_USER_PROMPT_TEMPLATE = """## 当前数据状态
+可用的OHLCV字段：{available_ohlcv}
+可用的指标字段：{available_indicators}
+
+## 策略描述
+{strategy_description}"""
 
 
-def signal_generate_node(state: SignalSubgraphState) -> dict:
+def signal_generate_node(
+    state: SignalSubgraphState,
+    config: RunnableConfig | None = None,
+) -> dict:
     """信号生成节点：使用PythonAstREPLTool生成交易信号"""
     
     # 获取当前可用数据
@@ -185,18 +188,24 @@ def signal_generate_node(state: SignalSubgraphState) -> dict:
     
     agent = create_react_agent(get_llm(), tools=[py_tool])
     
-    # 填充prompt
-    params = state.get('user_intent', {}).get('params', {})
-    strategy_description = params.get('strategy_desc', '未指定策略')
+    # 直接从state获取next_action_desc，作为策略描述
+    strategy_description = state.get('next_action_desc', '未指定策略')
     
-    prompt = SIGNAL_GENERATE_AGENT_PROMPT.format(
+    # 填充user message
+    user_message = SIGNAL_GENERATE_USER_PROMPT_TEMPLATE.format(
         available_ohlcv=list(snapshot.get('ohlcv', {}).keys()),
         available_indicators=list(snapshot.get('indicators', {}).keys()),
         strategy_description=strategy_description
     )
     
+    # 创建system + user消息对
+    messages = [
+        {"role": "system", "content": SIGNAL_GENERATE_SYSTEM_PROMPT},
+        {"role": "user", "content": user_message}
+    ]
+    
     # 执行agent
-    result = agent.invoke({"messages": [{"role": "user", "content": prompt}]})
+    result = agent.invoke({"messages": messages})
     
     # 检查信号是否生成
     snapshot = GLOBAL_DATA_STATE.snapshot()
@@ -205,21 +214,14 @@ def signal_generate_node(state: SignalSubgraphState) -> dict:
         'signal_ready': bool(snapshot.get('signal')),
     }
     
-    # 追加执行历史
-    if 'execution_history' not in state:
-        updates['execution_history'] = []
-    else:
-        updates['execution_history'] = state['execution_history'].copy()
-    
+    # 构建执行历史（返回新项，由add reducer自动追加）
     signal_fields = list(snapshot.get('signal', {}).keys())
-    updates['execution_history'].append(f"信号生成完成: {signal_fields}")
+    updates['execution_history'] = [
+        f"信号生成完成: {signal_fields}"
+    ]
     
     # 检查是否有错误
     if not updates['signal_ready']:
-        if 'error_messages' not in state:
-            updates['error_messages'] = []
-        else:
-            updates['error_messages'] = state['error_messages'].copy()
-        updates['error_messages'].append("信号生成失败：signal字段为空")
+        updates['error_messages'] = ["信号生成失败：signal字段为空"]
     
     return updates
